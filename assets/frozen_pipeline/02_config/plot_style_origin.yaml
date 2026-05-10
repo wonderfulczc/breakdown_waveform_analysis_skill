@@ -1,0 +1,1134 @@
+# plot_style_origin.yaml
+# Purpose:
+#   Origin-like plotting style for ML01 waveform analysis.
+#   Revised after visually inspecting the uploaded Science Robotics article:
+#   Li et al., "Plasticized electrohydraulic robot autopilots in the deep sea", Science Robotics, 2025.
+#
+# Scope:
+#   This file controls figure appearance only.
+#   It does not change waveform analysis, feature extraction, or classification rules.
+#
+# Visual target:
+#   Science Robotics article style:
+#   - white background
+#   - compact multi-panel layout
+#   - uppercase bold panel labels
+#   - sans-serif font
+#   - boxed scientific axes for quantitative plots
+#   - thin black axes
+#   - clean line plots with red/blue/green/black series
+#   - minimal grid
+#   - high-contrast annotations
+#   - vector-first export
+
+project:
+  project_name: "breakdown_waveform_analysis"
+  experiment_id: "ML01"
+  style_version: "plot_style_origin_science_robotics_v1.2_vivid"
+  target_journal: "Science Robotics"
+  reference_article_style: "Li_2025_Plasticized_electrohydraulic_robot_autopilots"
+  language: "zh-CN"
+
+# ----------------------------------------------------------------------
+# 1. General style policy
+# ----------------------------------------------------------------------
+
+style_policy:
+  overall_style: "Science Robotics compact multi-panel research article style"
+  background: "white"
+  decoration_level: "minimal"
+  grid_default: false
+  use_boxed_axes_for_quantitative_plots: true
+  use_open_axes_for_clean_waveform_quicklook: false
+  use_uppercase_panel_labels: true
+  use_sans_serif_font: true
+  use_vector_export_first: true
+  avoid_rainbow_palette: true
+  avoid_gradient_background: true
+  avoid_3d_effects: true
+  avoid_shadow: true
+  no_plot_titles_inside_axes: true
+
+color_palette:
+  mode: "fixed_group_waveform_sequence"
+  cycle_hex:
+    - "#fbe6a0"
+    - "#f9d68e"
+    - "#f4b751"
+    - "#f19f3d"
+    - "#e56d3d"
+    - "#d72c3c"
+    - "#c71a5b"
+    - "#a82c8c"
+    - "#7b4b9e"
+    - "#4d4e9f"
+  single_waveform_default_hex: "#0077FF"
+  fit_curve_hex: "#111111"
+  reference_line_hex: "#7A7A7A"
+  f1_marker_hex: "#D7263D"
+  f2_marker_hex: "#A64DFF"
+  fsrc_marker_hex: "#00A86B"
+
+line_style:
+  single_waveform_linewidth_pt: 1.4
+  overlay_linewidth_pt: 1.2
+  fit_curve_linewidth_pt: 1.1
+  alpha_single: 1.0
+  alpha_overlay: 0.95
+
+legend:
+  overlay_enabled: true
+  single_enabled: false
+  location: "upper right"
+  bbox_to_anchor: [0.98, 0.98]
+  frameon: true
+  frame_linewidth_pt: 0.6
+  fontsize_pt: 7.5
+  title_fontsize_pt: 7.5
+  title_align: "center"
+  sample_row_align: "left"
+  handle_width_fraction_of_box: 0.5
+  handlelength: 0.5
+  marker_in_handle: false
+  label_mode: "auto_short_name"
+  short_name_pattern: "{config_group}-{distance_short}-{load_short}-{ground_short}"
+  aliases:
+    distance:
+      "0.3": "0.3m"
+      "0.6": "0.6m"
+      "0.8": "0.8m"
+    load:
+      "1Mohm": "1M"
+      "50ohm": "50R"
+      "open": "Open"
+    ground:
+      "short": "Gs"
+      "long": "Gl"
+      "coax": "Gc"
+      "loop": "Gloop"
+
+time_domain_annotation:
+  enabled: true
+  apply_to: "single_waveform"
+  follow_legend_if_present: true
+  position: "upper_right_below_legend"
+  box_enabled: true
+  box_facecolor: "#FFFFFF"
+  box_edgecolor: "#000000"
+  box_linewidth_pt: 0.5
+  fontsize_pt: 7.5
+  line_spacing: 1.15
+  lines:
+    - "Apk = {Apk:.3g} V"
+    - "α = {alpha:.3e} s^-1"
+  fallback_when_nan:
+    alpha: "α = NaN"
+
+frequency_domain_annotation:
+  enabled: true
+  apply_to: "single_waveform"
+  follow_legend_if_present: true
+  position: "upper_right_below_legend"
+  box_enabled: true
+  box_facecolor: "#FFFFFF"
+  box_edgecolor: "#000000"
+  box_linewidth_pt: 0.5
+  fontsize_pt: 7.5
+  line_spacing: 1.15
+  lines:
+    - "f1 = {f1_MHz:.2f} MHz"
+  fallback_when_nan:
+    f1_MHz: "f1 = NaN"
+
+frequency_peak_markers:
+  enabled: true
+  show_f1: true
+  show_f2: true
+  show_fsrc: true
+  marker_style: "dashed_vertical_line"
+  linewidth_pt: 0.8
+  label_fontsize_pt: 7.0
+
+overlay_plot:
+  legend_required: true
+  sort_labels: true
+  use_short_name: true
+
+# ----------------------------------------------------------------------
+# 2. Figure size presets
+# ----------------------------------------------------------------------
+
+figure_size:
+  unit: "mm"
+
+  presets:
+    single_small:
+      width_mm: 58
+      height_mm: 43
+      description: "Small single quantitative panel, close to Science Robotics subpanel scale"
+
+    single_standard:
+      width_mm: 72
+      height_mm: 52
+      description: "Standard single waveform or spectrum panel"
+
+    two_panel_horizontal:
+      width_mm: 120
+      height_mm: 52
+      description: "Two compact quantitative panels in one row"
+
+    medium_multipanel:
+      width_mm: 125
+      height_mm: 86
+      description: "Medium multi-panel figure region"
+
+    full_width_multipanel:
+      width_mm: 180
+      height_mm: 115
+      description: "Full-width multi-panel summary figure"
+
+    full_width_tall:
+      width_mm: 180
+      height_mm: 145
+      description: "Full-width tall figure with overlays and statistics"
+
+  default_preset_single_waveform: "single_standard"
+  default_preset_single_frequency: "single_standard"
+  default_preset_single_fit: "single_standard"
+  default_preset_group_overlay: "full_width_multipanel"
+  default_preset_statistics: "full_width_multipanel"
+  default_preset_quality_summary: "full_width_multipanel"
+
+  margins:
+    left_mm: 11.0
+    right_mm: 3.5
+    top_mm: 4.0
+    bottom_mm: 9.0
+
+  compact_margins:
+    left_mm: 9.0
+    right_mm: 2.5
+    top_mm: 3.0
+    bottom_mm: 7.5
+
+  panel_spacing:
+    horizontal_mm: 7.0
+    vertical_mm: 6.0
+
+# ----------------------------------------------------------------------
+# 3. Export settings
+# ----------------------------------------------------------------------
+
+export:
+  formats:
+    - "png"
+
+  primary_vector_format: "none"
+  secondary_vector_format: "none"
+  raster_preview_format: "png"
+
+  dpi: 600
+  minimum_dpi: 300
+
+  background_color: "#FFFFFF"
+  transparent_background: false
+
+  bbox_inches: "tight"
+  pad_inches: 0.015
+
+  pdf_fonttype: 42
+  ps_fonttype: 42
+  svg_fonttype: "none"
+  embed_fonts_in_pdf: false
+
+  file_naming:
+    single_time: "{file_id}_time"
+    single_frequency: "{file_id}_freq"
+    single_fit: "{file_id}_fit"
+    overlay_time: "{group_id}_overlay_time"
+    overlay_frequency: "{group_id}_overlay_freq"
+    statistics: "{group_id}_statistics"
+    quality_summary: "all_groups_quality_ratio"
+    class_count: "all_groups_class_count"
+    heatmap: "all_groups_quality_heatmap"
+
+# ----------------------------------------------------------------------
+# 4. Fonts
+# ----------------------------------------------------------------------
+
+font:
+  primary: "Arial"
+  preferred_science_family_font: "Myriad Pro"
+  fallback:
+    - "Helvetica"
+    - "DejaVu Sans"
+    - "Liberation Sans"
+
+  math_font: "STIXGeneral"
+  use_sans_serif: true
+
+  sizes_pt:
+    panel_label: 8.5
+    axis_label: 7.2
+    tick_label: 6.4
+    legend: 6.4
+    annotation: 6.2
+    inset_label: 6.0
+    colorbar_label: 6.4
+    colorbar_tick: 6.0
+    table_text: 6.5
+
+  weights:
+    panel_label: "bold"
+    axis_label: "regular"
+    tick_label: "regular"
+    legend: "regular"
+    annotation: "regular"
+
+  rules:
+    max_font_size_span_pt: 3.0
+    no_titles_inside_axes: true
+    use_si_units: true
+    use_unicode_symbols: true
+
+# ----------------------------------------------------------------------
+# 5. Axes
+# ----------------------------------------------------------------------
+
+axes:
+  quantitative_style: "boxed"
+
+  face_color: "#FFFFFF"
+  edge_color: "#000000"
+
+  spine:
+    show_top: true
+    show_right: true
+    show_left: true
+    show_bottom: true
+    line_width_pt: 0.75
+    color: "#000000"
+
+  spine_open_axes:
+    show_top: false
+    show_right: false
+    show_left: true
+    show_bottom: true
+    line_width_pt: 0.75
+    color: "#000000"
+
+  axis_label:
+    color: "#000000"
+    labelpad_pt: 2.0
+
+  tick:
+    direction: "out"
+    major_length_pt: 2.8
+    minor_length_pt: 1.6
+    major_width_pt: 0.65
+    minor_width_pt: 0.45
+    color: "#000000"
+    label_color: "#000000"
+    top: false
+    right: false
+    minor_visible: true
+
+  grid:
+    enabled: false
+    major:
+      color: "#D9D9D9"
+      line_width_pt: 0.30
+      line_style: "-"
+      alpha: 0.25
+    minor:
+      color: "#EDEDED"
+      line_width_pt: 0.25
+      line_style: "-"
+      alpha: 0.20
+
+  zero_line:
+    enabled_for_time_domain: true
+    color: "#7F7F7F"
+    line_width_pt: 0.45
+    line_style: "-"
+
+# ----------------------------------------------------------------------
+# 6. Lines, markers, and error bars
+# ----------------------------------------------------------------------
+
+lines:
+  waveform_single:
+    color: "#000000"
+    line_width_pt: 0.80
+    line_style: "-"
+    alpha: 1.0
+
+  waveform_overlay:
+    line_width_pt: 0.45
+    line_style: "-"
+    alpha: 0.22
+
+  waveform_overlay_median:
+    color: "#000000"
+    line_width_pt: 1.05
+    line_style: "-"
+    alpha: 1.0
+
+  spectrum_single:
+    color: "#000000"
+    line_width_pt: 0.80
+    line_style: "-"
+    alpha: 1.0
+
+  spectrum_overlay:
+    line_width_pt: 0.45
+    line_style: "-"
+    alpha: 0.22
+
+  spectrum_overlay_median:
+    color: "#000000"
+    line_width_pt: 1.05
+    line_style: "-"
+    alpha: 1.0
+
+  fit_curve:
+    color: "#ED1C24"
+    line_width_pt: 0.90
+    line_style: "--"
+    alpha: 1.0
+
+  reference_line:
+    color: "#4D4D4D"
+    line_width_pt: 0.60
+    line_style: "--"
+    alpha: 0.85
+
+  threshold_line:
+    color: "#ED1C24"
+    line_width_pt: 0.65
+    line_style: ":"
+    alpha: 0.90
+
+  highlighted_trace:
+    color: "#ED1C24"
+    line_width_pt: 1.00
+    line_style: "-"
+    alpha: 1.0
+
+markers:
+  enabled_default: true
+
+  scatter:
+    size_pt: 3.0
+    edge_width_pt: 0.45
+    edge_color: "#000000"
+    alpha: 0.90
+
+  line_marker:
+    size_pt: 3.0
+    edge_width_pt: 0.45
+    alpha: 0.95
+
+  median_marker:
+    size_pt: 3.8
+    marker: "o"
+    edge_width_pt: 0.55
+
+  outlier_marker:
+    size_pt: 2.4
+    marker: "o"
+    face_color: "#FFFFFF"
+    edge_color: "#808080"
+    edge_width_pt: 0.40
+    alpha: 0.80
+
+error_bars:
+  line_width_pt: 0.65
+  cap_size_pt: 1.8
+  cap_thick_pt: 0.65
+  color: "#000000"
+
+# ----------------------------------------------------------------------
+# 7. Color palette
+# ----------------------------------------------------------------------
+
+colors:
+  philosophy: "Science Robotics article-matched red/blue/green/black palette with restrained saturation."
+
+  base:
+    black: "#000000"
+    dark_gray: "#4D4D4D"
+    gray: "#7F7F7F"
+    light_gray: "#BDBDBD"
+    very_light_gray: "#E6E6E6"
+    panel_light_gray: "#F2F2F2"
+    white: "#FFFFFF"
+    science_red: "#ED1C24"
+    science_blue: "#0057B8"
+    science_green: "#00A651"
+    science_yellow: "#FFF200"
+
+  primary_series:
+    black: "#000000"
+    red: "#ED1C24"
+    blue: "#0057B8"
+    green: "#00A651"
+    gray: "#7F7F7F"
+
+  group_palette:
+    G1:
+      color: "#000000"
+      label: "G1"
+      description: "conventional probe"
+    G2:
+      color: "#ED1C24"
+      label: "G2"
+      description: "probe-loop artifact check"
+    G3:
+      color: "#0057B8"
+      label: "G3"
+      description: "low-loop probe"
+    G4:
+      color: "#00A651"
+      label: "G4"
+      description: "coaxial 50 ohm"
+
+  quality_palette:
+    excellent:
+      color: "#0057B8"
+      label: "excellent"
+    usable:
+      color: "#00A651"
+      label: "usable"
+    suspicious:
+      color: "#F4A582"
+      label: "suspicious"
+    unusable:
+      color: "#ED1C24"
+      label: "unusable"
+    unknown:
+      color: "#7F7F7F"
+      label: "unknown"
+
+  waveform_class_palette:
+    A:
+      color: "#0057B8"
+      label: "A"
+    B:
+      color: "#00A651"
+      label: "B"
+    C:
+      color: "#F4A582"
+      label: "C"
+    D:
+      color: "#CC79A7"
+      label: "D"
+    E:
+      color: "#ED1C24"
+      label: "E"
+    F:
+      color: "#7F7F7F"
+      label: "F"
+    G:
+      color: "#000000"
+      label: "G"
+    H:
+      color: "#56B4E9"
+      label: "H"
+    unknown:
+      color: "#BDBDBD"
+      label: "unknown"
+
+  distance_palette:
+    D0p3m:
+      color: "#0057B8"
+    D0p4m:
+      color: "#CC79A7"
+    D0p6m:
+      color: "#00A651"
+    D0p8m:
+      color: "#ED1C24"
+
+  dark_image_annotation:
+    yellow: "#FFF200"
+    red: "#ED1C24"
+    white: "#FFFFFF"
+    line_width_pt: 0.80
+    text_size_pt: 6.5
+
+  sequential_palette:
+    name: "lightgray_to_blue"
+    colors:
+      - "#F2F2F2"
+      - "#D9EAF7"
+      - "#92C5DE"
+      - "#4393C3"
+      - "#0057B8"
+
+  diverging_palette:
+    name: "blue_white_red"
+    colors:
+      - "#0057B8"
+      - "#9ECAE1"
+      - "#FFFFFF"
+      - "#F4A582"
+      - "#ED1C24"
+
+  rules:
+    avoid_rainbow: true
+    avoid_neon_colors_except_dark_image_yellow_annotations: true
+    use_black_for_primary_single_trace: true
+    use_red_for_warnings_or_fit_highlight: true
+    use_blue_green_red_black_for_four_group_comparison: true
+    ensure_grayscale_readability: true
+
+# ----------------------------------------------------------------------
+# 8. Legend
+# ----------------------------------------------------------------------
+
+legend:
+  enabled: true
+  frame_on: false
+  location: "best"
+
+  font_size_pt: 6.4
+  handle_length_pt: 8.0
+  handle_text_pad_pt: 2.6
+  border_axes_pad_pt: 1.8
+  label_spacing_pt: 2.0
+  column_spacing_pt: 5.5
+
+  max_items_before_external_legend: 5
+
+  external_legend:
+    enabled_if_many_items: true
+    location: "right"
+    bbox_anchor:
+      x: 1.02
+      y: 1.00
+
+# ----------------------------------------------------------------------
+# 9. Panel labels
+# ----------------------------------------------------------------------
+
+panel_label:
+  enabled: true
+  style: "uppercase_bold"
+  labels:
+    - "A"
+    - "B"
+    - "C"
+    - "D"
+    - "E"
+    - "F"
+    - "G"
+    - "H"
+    - "I"
+    - "J"
+    - "K"
+
+  font_size_pt: 8.5
+  font_weight: "bold"
+  color: "#000000"
+
+  position:
+    x_axes_fraction: -0.13
+    y_axes_fraction: 1.06
+
+  position_inside_for_image_panels:
+    enabled: true
+    x_axes_fraction: 0.02
+    y_axes_fraction: 0.96
+    color: "#000000"
+
+  use_parentheses: false
+
+# ----------------------------------------------------------------------
+# 10. Labels and unit conventions
+# ----------------------------------------------------------------------
+
+labels:
+  use_english_labels_for_publication: true
+  use_chinese_labels_for_internal: false
+
+  time_domain:
+    x_label: "Time (µs)"
+    y_label: "Voltage (V)"
+
+  frequency_domain:
+    x_label: "Frequency (MHz)"
+    y_label: "Amplitude (a.u.)"
+
+  fitting:
+    x_label: "Time (µs)"
+    y_label: "Voltage (V)"
+
+  statistics:
+    f1_label: "Dominant frequency, f1 (MHz)"
+    fsrc_label: "Tracked source frequency, fsrc (MHz)"
+    alpha_label: "Damping coefficient, α (s⁻¹)"
+    Apk_label: "Peak amplitude, Apk (V)"
+    PSR_label: "Peak significance ratio, PSR (dB)"
+    SNR_label: "Narrowband SNR (dB)"
+    rho_label: "Template correlation, ρ"
+
+  quality:
+    ratio_label: "Ratio (%)"
+    count_label: "Count"
+
+  units:
+    use_micro_symbol: true
+    use_superscript_minus: true
+    space_between_number_and_unit: true
+    no_space_before_percent: true
+
+# ----------------------------------------------------------------------
+# 11. Time-domain figures
+# ----------------------------------------------------------------------
+
+time_domain_plot:
+  enabled: true
+  figure_preset: "single_standard"
+  axes_style: "boxed"
+
+  x_unit_output: "us"
+  y_unit_output: "V"
+
+  show_zero_line: true
+  show_burst_window: true
+
+  burst_window_style:
+    face_color: "#F2F2F2"
+    alpha: 0.55
+    edge_color: "none"
+
+  show_Apk_marker: true
+  Apk_marker:
+    marker: "o"
+    size_pt: 3.6
+    face_color: "#FFFFFF"
+    edge_color: "#ED1C24"
+    edge_width_pt: 0.70
+
+  show_annotations:
+    Apk: true
+    waveform_class: true
+    quality_label: true
+
+  annotation_box:
+    enabled: true
+    location: "upper right"
+    font_size_pt: 6.0
+    face_color: "#FFFFFF"
+    edge_color: "#BDBDBD"
+    line_width_pt: 0.35
+    alpha: 0.88
+
+  y_limits:
+    mode: "auto_symmetric"
+    padding_fraction: 0.08
+
+  x_limits:
+    mode: "analysis_window_with_padding"
+
+# ----------------------------------------------------------------------
+# 12. Frequency-domain figures
+# ----------------------------------------------------------------------
+
+frequency_domain_plot:
+  enabled: true
+  figure_preset: "single_standard"
+  axes_style: "boxed"
+
+  x_unit_output: "MHz"
+  y_scale: "linear"
+  y_label: "Amplitude (a.u.)"
+
+  x_limits:
+    mode: "configured_search_band"
+    min_MHz: 0
+    max_MHz: 200
+
+  y_limits:
+    mode: "auto"
+    padding_fraction: 0.08
+
+  show_f1_marker: true
+  show_f2_marker: true
+  show_fsrc_marker: true
+
+  f1_marker:
+    color: "#ED1C24"
+    line_width_pt: 0.75
+    line_style: "--"
+    label: "f1"
+
+  f2_marker:
+    color: "#7F7F7F"
+    line_width_pt: 0.65
+    line_style: ":"
+    label: "f2"
+
+  fsrc_marker:
+    color: "#0057B8"
+    line_width_pt: 0.75
+    line_style: "-."
+    label: "fsrc"
+
+  show_search_band: false
+
+  annotation:
+    enabled: true
+    fields:
+      - "f1_MHz"
+      - "PSR_dB"
+      - "narrowband_SNR_dB"
+    font_size_pt: 6.0
+
+# ----------------------------------------------------------------------
+# 13. Fit figures
+# ----------------------------------------------------------------------
+
+fit_plot:
+  enabled: true
+  figure_preset: "single_standard"
+  axes_style: "boxed"
+
+  show_raw: true
+  show_fit: true
+  show_residual: false
+
+  raw_style:
+    color: "#000000"
+    line_width_pt: 0.75
+    alpha: 0.85
+
+  fit_style:
+    color: "#ED1C24"
+    line_width_pt: 0.90
+    line_style: "--"
+
+  annotation:
+    enabled: true
+    fields:
+      - "alpha"
+      - "fit_R2"
+      - "rho"
+    font_size_pt: 6.0
+
+# ----------------------------------------------------------------------
+# 14. Overlay figures
+# ----------------------------------------------------------------------
+
+overlay_plots:
+  time_domain:
+    enabled: true
+    figure_preset: "full_width_multipanel"
+    axes_style: "boxed"
+
+    align_method: "peak_time"
+    normalize: false
+
+    individual_trace:
+      line_width_pt: 0.42
+      alpha: 0.20
+
+    median_trace:
+      enabled: true
+      line_width_pt: 1.05
+      color: "#000000"
+
+    show_IQR_band: true
+    IQR_band:
+      face_color: "#BDBDBD"
+      alpha: 0.28
+      edge_color: "none"
+
+  frequency_domain:
+    enabled: true
+    figure_preset: "full_width_multipanel"
+    axes_style: "boxed"
+
+    individual_trace:
+      line_width_pt: 0.42
+      alpha: 0.20
+
+    median_trace:
+      enabled: true
+      line_width_pt: 1.05
+      color: "#000000"
+
+    show_f1_median: true
+    show_fsrc: true
+
+# ----------------------------------------------------------------------
+# 15. Statistical figures
+# ----------------------------------------------------------------------
+
+statistics_plots:
+  enabled: true
+  figure_preset: "full_width_multipanel"
+  axes_style: "boxed"
+
+  boxplot:
+    enabled: true
+    box_width: 0.55
+    line_width_pt: 0.70
+    median_line_width_pt: 0.95
+    whisker_line_width_pt: 0.65
+    cap_line_width_pt: 0.65
+    box_face_alpha: 0.70
+    show_fliers: true
+
+    jitter_points:
+      enabled: true
+      size_pt: 2.1
+      alpha: 0.55
+      jitter_width: 0.10
+
+  line_with_errorbar:
+    enabled: true
+    line_width_pt: 0.85
+    marker_size_pt: 3.0
+    errorbar_line_width_pt: 0.65
+    cap_size_pt: 1.8
+
+  barplot:
+    enabled: true
+    bar_width: 0.65
+    edge_color: "#000000"
+    edge_width_pt: 0.45
+
+  stacked_bar:
+    enabled: true
+    bar_width: 0.70
+    edge_color: "#FFFFFF"
+    edge_width_pt: 0.35
+
+  heatmap:
+    enabled: true
+    colormap: "lightgray_to_blue"
+    show_values: true
+    value_font_size_pt: 6.0
+    border_line_width_pt: 0.35
+    border_color: "#FFFFFF"
+
+# ----------------------------------------------------------------------
+# 16. ML01 plot presets
+# ----------------------------------------------------------------------
+
+ML01_plot_presets:
+
+  single_waveform_time:
+    figure_type: "single_time"
+    figure_preset: "single_standard"
+    output_dir: "single_waveform/figures_time_domain"
+    x_label: "Time (µs)"
+    y_label: "Voltage (V)"
+    use_color: false
+    axes_style: "boxed"
+
+  single_waveform_frequency:
+    figure_type: "single_frequency"
+    figure_preset: "single_standard"
+    output_dir: "single_waveform/figures_frequency_domain"
+    x_label: "Frequency (MHz)"
+    y_label: "Amplitude (a.u.)"
+    use_color: false
+    axes_style: "boxed"
+
+  single_waveform_fit:
+    figure_type: "single_fit"
+    figure_preset: "single_standard"
+    output_dir: "single_waveform/figures_fit"
+    x_label: "Time (µs)"
+    y_label: "Voltage (V)"
+    axes_style: "boxed"
+
+  group_overlay_time:
+    figure_type: "overlay_time"
+    figure_preset: "full_width_multipanel"
+    output_dir: "group_summary/overlay_time_domain"
+    color_by: "config_group"
+    axes_style: "boxed"
+
+  group_overlay_frequency:
+    figure_type: "overlay_frequency"
+    figure_preset: "full_width_multipanel"
+    output_dir: "group_summary/overlay_frequency_domain"
+    color_by: "config_group"
+    axes_style: "boxed"
+
+  group_statistics_f1:
+    figure_type: "boxplot"
+    figure_preset: "full_width_multipanel"
+    output_dir: "group_summary/statistics_figures"
+    y_field: "f1_MHz"
+    y_label: "Dominant frequency, f1 (MHz)"
+    color_by: "config_group"
+    axes_style: "boxed"
+
+  group_statistics_alpha:
+    figure_type: "boxplot"
+    figure_preset: "full_width_multipanel"
+    output_dir: "group_summary/statistics_figures"
+    y_field: "alpha"
+    y_label: "Damping coefficient, α (s⁻¹)"
+    color_by: "config_group"
+    axes_style: "boxed"
+
+  group_statistics_Apk:
+    figure_type: "boxplot"
+    figure_preset: "full_width_multipanel"
+    output_dir: "group_summary/statistics_figures"
+    y_field: "Apk"
+    y_label: "Peak amplitude, Apk (V)"
+    color_by: "config_group"
+    axes_style: "boxed"
+
+  group_quality_ratio:
+    figure_type: "stacked_bar"
+    figure_preset: "full_width_multipanel"
+    output_dir: "group_summary/statistics_figures"
+    y_label: "Ratio (%)"
+    color_by: "quality_label"
+    axes_style: "boxed"
+
+  group_class_count:
+    figure_type: "stacked_bar"
+    figure_preset: "full_width_multipanel"
+    output_dir: "group_summary/statistics_figures"
+    y_label: "Count"
+    color_by: "waveform_class"
+    axes_style: "boxed"
+
+# ----------------------------------------------------------------------
+# 17. Origin-like implementation details
+# ----------------------------------------------------------------------
+
+origin_like:
+  enabled: true
+
+  page:
+    background_color: "#FFFFFF"
+    use_black_axes: true
+    use_boxed_axes: true
+    use_outward_ticks: true
+    use_thin_axes: true
+    use_clean_legend: true
+
+  graph_layer:
+    border: false
+    white_background: true
+
+  tick_label_format:
+    use_scientific_notation_if_abs_greater_than: 10000
+    use_scientific_notation_if_abs_less_than: 0.001
+    max_decimal_places: 3
+    trim_trailing_zeros: true
+
+  axis_label_offset:
+    x_label_offset_pt: 2.0
+    y_label_offset_pt: 2.5
+
+  curve_order:
+    raw_data_first: true
+    fit_on_top: true
+    markers_on_top: true
+    annotations_on_top: true
+
+# ----------------------------------------------------------------------
+# 18. Annotations
+# ----------------------------------------------------------------------
+
+annotations:
+  default:
+    font_size_pt: 6.2
+    color: "#000000"
+    arrow_color: "#000000"
+    arrow_line_width_pt: 0.55
+    arrow_style: "->"
+
+  warning:
+    font_size_pt: 6.2
+    color: "#ED1C24"
+    arrow_color: "#ED1C24"
+    arrow_line_width_pt: 0.65
+
+  dark_image:
+    font_size_pt: 6.4
+    color: "#FFF200"
+    arrow_color: "#FFF200"
+    arrow_line_width_pt: 0.80
+
+# ----------------------------------------------------------------------
+# 19. Quality checks
+# ----------------------------------------------------------------------
+
+quality_checks:
+  enabled: true
+
+  check_min_font_size: true
+  min_font_size_pt: 6.0
+
+  check_min_line_width: true
+  min_line_width_pt: 0.40
+
+  check_color_contrast: true
+  check_grayscale_distinguishability: true
+
+  warn_if_too_many_colors: true
+  max_colors_per_panel: 5
+
+  warn_if_legend_too_large: true
+  max_legend_items_inside_axes: 5
+
+  warn_if_title_inside_axes: true
+
+# ----------------------------------------------------------------------
+# 20. Quick-look style
+# ----------------------------------------------------------------------
+
+quicklook:
+  enabled: true
+  purpose: "Fast internal inspection; not final publication."
+  dpi: 200
+  figure_preset: "single_standard"
+  show_grid: true
+  grid_alpha: 0.25
+  save_format: "png"
+
+# ----------------------------------------------------------------------
+# 21. Publication checklist
+# ----------------------------------------------------------------------
+
+publication:
+  enabled: true
+  purpose: "Science Robotics article-matched final figures."
+
+  use_vector_pdf: false
+  use_svg: false
+  dpi: 600
+
+  no_axes_titles: true
+  no_chartjunk: true
+  no_background_grid: true
+  no_3d_effects: true
+  no_gradient_background: true
+  no_shadow: true
+
+  final_checklist:
+    - "White background."
+    - "Sans-serif font."
+    - "Uppercase bold panel labels."
+    - "Boxed axes for quantitative plots."
+    - "Thin black axes, approximately 0.75 pt."
+    - "Tick labels approximately 6.4 pt."
+    - "Axis labels approximately 7.2 pt."
+    - "Primary single trace is black."
+    - "Group comparison uses black, red, blue, and green."
+    - "Axis labels include units."
+    - "No internal plot title."
+    - "No rainbow colormap."
+    - "No grid in final publication figures."
+    - "PNG output is generated at 600 dpi."

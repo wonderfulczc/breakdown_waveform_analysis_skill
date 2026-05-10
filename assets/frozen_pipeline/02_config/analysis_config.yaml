@@ -1,0 +1,1796 @@
+# analysis_config.yaml
+# Purpose:
+#   Final analysis configuration for ML01 waveform processing.
+#   This file controls raw waveform format detection, normalization, preprocessing,
+#   burst detection, FFT, peak extraction, fsrc tracking, SNR, damping fitting,
+#   template correlation, waveform morphology flags, group statistics, logging,
+#   Excel export, and reproducibility.
+#
+# Scope:
+#   ML01 only.
+#   Experiment 1: measurement-chain artifact exclusion and receiver loading influence check.
+#
+# Important:
+#   A/B/C/D/E/F/G/H classification rules are defined in classification_rules.yaml.
+#   This file only defines how features and intermediate flags are computed.
+
+project:
+  project_name: "breakdown_waveform_analysis"
+  experiment_id: "ML01"
+  experiment_description: "实验一：测量链排伪影与接收端影响核查"
+  config_version: "analysis_config_ML01_final_v1.0"
+  language: "zh-CN"
+
+# ----------------------------------------------------------------------
+# 1. Paths
+# ----------------------------------------------------------------------
+
+paths:
+  raw_csv_dir: "00_raw_csv"
+  metadata_dir: "01_metadata"
+  config_dir: "02_config"
+  scripts_dir: "03_scripts"
+  results_dir: "04_results"
+  docs_dir: "05_docs"
+
+  sample_index_csv: "01_metadata/sample_index.csv"
+  group_definition_csv: "01_metadata/group_definition.csv"
+
+  readme_doc: "05_docs/README.md"
+  file_naming_rule_doc: "05_docs/file_naming_rule.md"
+  parameter_definition_doc: "05_docs/parameter_definition.md"
+
+# ----------------------------------------------------------------------
+# 2. Run control
+# ----------------------------------------------------------------------
+
+run:
+  run_id_format: "run_%Y%m%d_%H%M"
+  allow_overwrite_old_run: false
+  if_run_id_exists: "append_counter"
+  append_counter_format: "_%02d"
+  timezone: "local"
+
+raw_data_protection:
+  raw_csv_read_only: true
+  allow_modify_raw_csv: false
+  allow_rename_raw_csv: false
+  allow_delete_raw_csv: false
+  allow_write_result_to_raw_csv_dir: false
+
+# ----------------------------------------------------------------------
+# 3. Waveform format detection and normalization
+# ----------------------------------------------------------------------
+
+waveform_format_detection:
+  enabled: true
+  raw_files_read_only: true
+
+  detect_by:
+    - "file_signature"
+    - "file_extension"
+    - "first_30_lines"
+    - "delimiter_pattern"
+    - "header_keywords"
+    - "sheet_structure"
+
+  supported_formats:
+    true_text_csv:
+      enabled: true
+      description: "Plain text CSV with direct time-voltage columns"
+
+    oscilloscope_sequence_volt_csv:
+      enabled: true
+      description: "Two-row metadata format: X,CH1,Start,Increment / Sequence,Volt,start,increment"
+
+    csv_with_preamble:
+      enabled: true
+      description: "Text CSV with instrument metadata lines before numerical table"
+
+    excel_xlsx:
+      enabled: true
+      description: "Excel .xlsx waveform file"
+
+    excel_xls_or_ole_binary:
+      enabled: true
+      description: "Excel 97-2003 or OLE binary workbook, including files mislabeled as .csv"
+
+    unknown_binary:
+      enabled: false
+      description: "Unsupported proprietary binary format"
+
+  file_signature:
+    ole_header_hex: "D0CF11E0A1B11AE1"
+    xlsx_zip_header_hex: "504B0304"
+
+  loaders:
+    true_text_csv:
+      method: "pandas_read_csv_auto"
+      delimiter_mode: "auto"
+
+    oscilloscope_sequence_volt_csv:
+      method: "parse_sequence_volt_start_increment"
+      expected_metadata_row:
+        - "X"
+        - "CH1"
+        - "Start"
+        - "Increment"
+      expected_value_row:
+        - "Sequence"
+        - "Volt"
+      metadata_row_index: 0
+      value_row_index: 1
+      data_start_row_index: 2
+      sequence_column_index: 0
+      voltage_column_index: 1
+      start_value_cell:
+        row: 1
+        column: 2
+      increment_value_cell:
+        row: 1
+        column: 3
+      time_formula: "time_s = start_s + sequence * increment_s"
+      voltage_column: "Volt"
+
+    csv_with_preamble:
+      method: "auto_detect_numeric_table_start"
+      max_preamble_lines_to_scan: 100
+
+    excel_xlsx:
+      method: "pandas_read_excel"
+      sheet: "first"
+
+    excel_xls_or_ole_binary:
+      method: "try_read_excel_with_available_engine"
+      fallback_action: "mark_error"
+
+  normalized_output:
+    enabled: true
+    output_dir: "normalized_waveform/normalized_csv"
+    file_suffix: "_normalized.csv"
+    required_columns:
+      - "time_s"
+      - "voltage_V"
+
+    write_metadata_header: false
+    preserve_raw_file_path: true
+
+  format_detection_summary:
+    enabled: true
+    output_file: "normalized_waveform/format_detection_summary.csv"
+    fields:
+      - "run_id"
+      - "file_id"
+      - "file_name"
+      - "file_path"
+      - "file_extension"
+      - "detected_format"
+      - "loader_used"
+      - "parse_status"
+      - "time_column_mode"
+      - "voltage_column_mode"
+      - "start_time_s"
+      - "time_increment_s"
+      - "sampling_rate_Hz"
+      - "record_length"
+      - "error_message"
+      - "suggested_action"
+
+  on_parse_failure:
+    action: "write_to_error_files_and_continue"
+    analysis_status: "csv_read_failed"
+    error_type: "waveform_format_parse_failed"
+
+waveform_domain_detection:
+  enabled: true
+
+  # Purpose:
+  #   Detect whether the input waveform file is time-domain data,
+  #   frequency-domain magnitude spectrum, or frequency-domain complex spectrum.
+  #   This prevents wrong FFT/IFFT direction.
+
+  detect_by:
+    - "column_names"
+    - "axis_units"
+    - "axis_value_range"
+    - "monotonic_axis"
+    - "metadata_keywords"
+    - "data_shape"
+
+  allowed_domains:
+    - "time_domain"
+    - "frequency_domain_magnitude"
+    - "frequency_domain_complex"
+    - "unknown"
+
+  time_domain_detection:
+    x_column_candidates:
+      - "time"
+      - "Time"
+      - "TIME"
+      - "t"
+      - "T"
+      - "时间"
+      - "Sequence"
+      - "sequence"
+      - "Index"
+      - "index"
+
+    y_column_candidates:
+      - "voltage"
+      - "Voltage"
+      - "Volt"
+      - "V"
+      - "CH1"
+      - "CH2"
+      - "电压"
+      - "信号"
+
+    time_unit_candidates:
+      - "s"
+      - "ms"
+      - "us"
+      - "µs"
+      - "ns"
+
+    sequence_time_reconstruction_allowed: true
+    sequence_time_formula: "time_s = start_s + sequence * increment_s"
+
+  frequency_domain_detection:
+    x_column_candidates:
+      - "frequency"
+      - "Frequency"
+      - "FREQ"
+      - "freq"
+      - "f"
+      - "频率"
+      - "Frequency(MHz)"
+      - "Frequency(Hz)"
+      - "Freq(MHz)"
+
+    magnitude_column_candidates:
+      - "amplitude"
+      - "Amplitude"
+      - "Magnitude"
+      - "mag"
+      - "FFT"
+      - "Spectrum"
+      - "Amp"
+      - "幅值"
+      - "谱幅值"
+
+    complex_column_candidates:
+      real:
+        - "real"
+        - "Real"
+        - "Re"
+      imag:
+        - "imag"
+        - "Imag"
+        - "Im"
+      phase:
+        - "phase"
+        - "Phase"
+
+    frequency_unit_candidates:
+      - "Hz"
+      - "kHz"
+      - "MHz"
+      - "GHz"
+
+  processing_direction:
+    if_time_domain: "forward_fft_time_to_frequency"
+    if_frequency_domain_magnitude: "use_frequency_data_directly_no_ifft"
+    if_frequency_domain_complex: "allow_ifft_only_if_complex_spectrum_is_complete"
+    if_unknown: "mark_error"
+
+  ifft_policy:
+    allow_ifft_from_magnitude_only: false
+    allow_ifft_from_complex_spectrum: true
+    require_uniform_frequency_spacing: true
+    require_phase_or_real_imag: true
+    if_ifft_not_allowed: "frequency_features_only_and_warn"
+
+  output_fields:
+    - "input_data_domain"
+    - "processing_direction"
+    - "fft_performed"
+    - "ifft_performed"
+    - "time_domain_available"
+    - "frequency_domain_available"
+    - "time_domain_reconstructed"
+    - "domain_detection_status"
+
+normalized_waveform_export:
+  enabled: true
+
+  # CSV remains the fast downstream input.
+  save_standard_csv: true
+  standard_csv_dir: "normalized_waveform/normalized_csv"
+  standard_csv_suffix: "_normalized.csv"
+  standard_csv_columns:
+    - "time_s"
+    - "voltage_V"
+
+  # XLSX is used because CSV has no sheets.
+  save_domain_workbook: true
+  workbook_dir: "normalized_waveform/normalized_csv"
+  workbook_suffix: "_normalized.xlsx"
+
+  workbook_sheets:
+    time_domain:
+      sheet_name: "time_domain"
+      columns:
+        - "time_s"
+        - "voltage_V"
+      if_unavailable: "write_empty_sheet_with_reason"
+
+    frequency_domain:
+      sheet_name: "frequency_domain"
+      columns:
+        - "frequency_MHz"
+        - "amplitude_au"
+      if_unavailable: "write_empty_sheet_with_reason"
+
+    processing_info:
+      sheet_name: "processing_info"
+      fields:
+        - "run_id"
+        - "file_id"
+        - "file_name"
+        - "input_data_domain"
+        - "detected_format"
+        - "loader_used"
+        - "processing_direction"
+        - "fft_performed"
+        - "ifft_performed"
+        - "time_domain_available"
+        - "frequency_domain_available"
+        - "time_domain_reconstructed"
+        - "sampling_rate_Hz"
+        - "record_length"
+        - "domain_detection_status"
+        - "notes"
+
+  downstream_priority:
+    time_domain_features: "use_time_domain_sheet_or_standard_csv"
+    frequency_domain_features: "use_frequency_domain_sheet"
+    if_time_domain_missing: "skip_time_domain_features_and_fit"
+    if_frequency_domain_missing: "compute_fft_from_time_domain"
+
+# ----------------------------------------------------------------------
+# 4. CSV and column reading
+# ----------------------------------------------------------------------
+
+csv_reading:
+  file_extension: ".csv"
+  allow_uppercase_extension: true
+  require_true_text_csv: false
+
+  encoding_priority:
+    - "utf-8-sig"
+    - "utf-8"
+    - "gbk"
+    - "latin1"
+
+  delimiter:
+    mode: "auto"
+    candidates:
+      - ","
+      - ";"
+      - "\t"
+
+  header:
+    mode: "auto"
+    allow_no_header: true
+
+  column_detection:
+    time_column_candidates:
+      - "time"
+      - "Time"
+      - "TIME"
+      - "t"
+      - "T"
+      - "时间"
+      - "时间(s)"
+      - "时间(ms)"
+      - "时间(us)"
+      - "时间(µs)"
+      - "时间(ns)"
+      - "Time(s)"
+      - "Time(ms)"
+      - "Time(us)"
+      - "Time(µs)"
+      - "Time(ns)"
+
+    voltage_column_candidates:
+      - "voltage"
+      - "Voltage"
+      - "V"
+      - "v"
+      - "CH1"
+      - "CH2"
+      - "Amplitude"
+      - "amp"
+      - "Volt"
+      - "信号"
+      - "电压"
+      - "电压(V)"
+      - "电压(mV)"
+
+    sequence_column_candidates:
+      - "Sequence"
+      - "sequence"
+      - "Index"
+      - "index"
+      - "Point"
+      - "point"
+
+    fallback_if_no_header:
+      time_column_index: 0
+      voltage_column_index: 1
+
+  units:
+    time_unit_mode: "auto"
+    default_time_unit: "s"
+    allowed_time_units:
+      - "s"
+      - "ms"
+      - "us"
+      - "µs"
+      - "ns"
+
+    voltage_unit_mode: "auto"
+    default_voltage_unit: "V"
+    allowed_voltage_units:
+      - "V"
+      - "mV"
+
+  invalid_data:
+    allow_nan: false
+    allow_inf: false
+    drop_nan_rows: true
+    max_nan_fraction: 0.01
+    if_too_many_nan: "mark_error"
+
+  time_axis_check:
+    require_monotonic_increasing: true
+    duplicate_time_action: "drop_duplicate"
+    nonuniform_sampling_tolerance_percent: 1.0
+    if_nonuniform_sampling: "use_median_dt_and_warn"
+
+# ----------------------------------------------------------------------
+# 5. Sampling
+# ----------------------------------------------------------------------
+
+sampling:
+  sampling_rate_source: "time_s"
+  sampling_rate_method: "median_dt"
+  min_sampling_rate_Hz: 1.0e6
+  max_sampling_rate_Hz: 1.0e11
+  if_sampling_rate_invalid: "mark_error"
+
+  nyquist:
+    calculate: true
+    field_name: "nyquist_Hz"
+
+# ----------------------------------------------------------------------
+# 6. Metadata handling
+# ----------------------------------------------------------------------
+
+metadata:
+  priority:
+    - "sample_index_manual_correction"
+    - "filename_parsing"
+    - "folder_path"
+    - "mark_warning_or_error"
+
+  preserve_user_fields:
+    - "included"
+    - "manual_note"
+    - "notes"
+
+  default_values:
+    included: 1
+
+  conflict_handling:
+    if_filename_conflicts_with_sample_index: "use_sample_index_and_warn"
+    warning_flag: "metadata_conflict"
+
+  undefined_group:
+    if_group_not_in_group_definition: "warn_and_continue"
+    warning_flag: "undefined_group"
+
+# ----------------------------------------------------------------------
+# 7. Preprocessing
+# ----------------------------------------------------------------------
+
+preprocessing:
+  enabled: true
+
+  polarity:
+    use_absolute_peak_for_Apk: true
+    preserve_original_polarity_for_plot: true
+
+  baseline_correction:
+    enabled: true
+    method: "pretrigger_median"
+    pretrigger_fraction: 0.10
+    fallback_method: "global_median"
+    output_field: "baseline_V"
+
+  detrend:
+    enabled: false
+    method: "linear"
+
+  smoothing:
+    enabled: false
+    method: "none"
+
+  filtering:
+    enabled: false
+    filter_type: "bandpass"
+    low_cut_Hz: 1.0e6
+    high_cut_Hz: 3.0e8
+    order: 4
+    zero_phase: true
+    apply_before_feature_extraction: false
+
+  normalization:
+    enabled_for_feature_extraction: false
+    enabled_for_template_correlation: true
+    method: "max_abs"
+    alternative_method: "energy"
+
+# ----------------------------------------------------------------------
+# 8. Analysis window and burst detection
+# ----------------------------------------------------------------------
+
+analysis_window:
+  mode: "auto_main_burst"
+  full_record_fallback: true
+
+  main_burst_detection:
+    method: "threshold_on_abs_signal"
+    noise_estimation: "pretrigger_mad"
+    threshold_sigma: 6.0
+    min_burst_duration_s: 1.0e-8
+    merge_gap_s: 5.0e-8
+    min_points_per_burst: 5
+
+  window_padding:
+    pre_burst_s: 2.0e-8
+    post_burst_s: 2.0e-7
+
+  if_burst_not_found: "use_full_record_and_warn"
+  warning_flag_if_burst_not_found: "burst_not_found"
+
+  output_fields:
+    - "burst_start_s"
+    - "burst_end_s"
+    - "num_bursts"
+    - "single_burst"
+
+# ----------------------------------------------------------------------
+# 9. Time-domain morphology flags for A-H classification
+# ----------------------------------------------------------------------
+
+morphology_detection:
+  enabled: true
+
+  envelope:
+    method: "hilbert_abs"
+    smoothing_enabled: true
+    smoothing_window_fraction: 0.03
+    monotonic_tolerance_fraction: 0.15
+    output_field: "envelope_monotonic"
+
+  front_glitch:
+    enabled: true
+    pre_main_peak_window_s: 5.0e-8
+    amplitude_fraction_of_Apk: 0.15
+    output_field: "front_glitch_flag"
+
+  tail_disturbance:
+    enabled: true
+    tail_start_after_main_peak_s: 1.0e-7
+    amplitude_fraction_of_Apk: 0.15
+    output_field: "tail_disturbance_flag"
+
+  reignition_or_multiburst:
+    enabled: true
+    min_separation_s: 5.0e-8
+    secondary_burst_fraction_of_Apk: 0.25
+    output_fields:
+      - "reignition_flag"
+      - "multiburst_flag"
+      - "num_bursts"
+
+  overdamped_or_nonoscillatory:
+    enabled: true
+    min_zero_crossings_in_window: 3
+    min_spectral_peak_PSR_dB: 6.0
+    output_fields:
+      - "overdamped_flag"
+      - "nonoscillatory_flag"
+
+  echo_or_multipath:
+    enabled: true
+    delayed_window_after_burst_s: 1.0e-7
+    echo_amplitude_fraction_of_Apk: 0.12
+    output_fields:
+      - "echo_flag"
+      - "delayed_echo_detected"
+
+  overdrive_recovery:
+    enabled: true
+    recovery_tail_fraction_of_Apk: 0.20
+    recovery_duration_s: 2.0e-7
+    output_field: "overdrive_recovery_flag"
+
+# ----------------------------------------------------------------------
+# 10. Clipping, saturation, and aliasing checks
+# ----------------------------------------------------------------------
+
+distortion_detection:
+  enabled: true
+
+  clipping:
+    enabled: true
+    method: "flat_top_and_adc_limit"
+    flat_top:
+      min_consecutive_points: 3
+      amplitude_tolerance_fraction_of_range: 0.005
+    adc_limit:
+      enabled: true
+      near_limit_fraction: 0.98
+    output_field: "clipped"
+    warning_flag: "clipped"
+
+  saturation:
+    enabled: true
+    plateau_min_points: 3
+    plateau_tolerance_fraction_of_range: 0.005
+    output_field: "saturated"
+    warning_flag: "saturated"
+
+  aliasing:
+    enabled: true
+    method: "peak_near_nyquist_or_folded_high_frequency"
+    near_nyquist_fraction: 0.85
+    output_field: "aliasing_flag"
+    warning_flag: "aliasing"
+
+# ----------------------------------------------------------------------
+# 11. FFT and spectrum
+# ----------------------------------------------------------------------
+
+fft:
+  enabled: true
+
+  input_signal: "analysis_window"
+  remove_dc_before_fft: true
+
+  window:
+    enabled: true
+    type: "hann"
+
+  zero_padding:
+    enabled: true
+    next_power_of_two: true
+    minimum_nfft: 4096
+
+  spectrum_type: "single_sided"
+  amplitude_scaling: "relative"
+  frequency_unit: "MHz"
+
+  search_band_MHz:
+    min: 1.0
+    max: 300.0
+
+  if_search_band_exceeds_nyquist: "clip_to_0p9_nyquist_and_warn"
+
+  save_spectrum_for_plots: true
+
+# ----------------------------------------------------------------------
+# 12. Peak detection and f2 relation
+# ----------------------------------------------------------------------
+
+peak_detection:
+  enabled: true
+
+  peak_search_source: "fft_or_input_frequency_magnitude"
+
+  # ------------------------------------------------------------
+  # Core idea:
+  #   Do not identify f1/f2 directly from raw local maxima.
+  #   First cluster local maxima into independent peak groups.
+  #   Shoulder peaks inside the same broad peak must not be treated as f2.
+  # ------------------------------------------------------------
+
+  independent_peak_detection:
+    enabled: true
+    method: "local_maxima_then_peak_cluster"
+
+    frequency_range_MHz:
+      min: 1.0
+      max: 300.0
+
+    smoothing_before_peak_detection:
+      enabled: true
+      method: "savitzky_golay"
+      window_length_points: 9
+      polyorder: 2
+      apply_only_to_peak_search: true
+      preserve_raw_spectrum_for_plot: true
+
+    local_maxima:
+      min_prominence_dB: 3.0
+      min_relative_height_to_global_max: 0.08
+      min_absolute_amplitude: "auto_noise_floor_based"
+      min_distance_MHz: 1.0
+
+    peak_cluster:
+      enabled: true
+
+      # If two local maxima are too close, judge whether they are one broad peak.
+      same_peak_if_any:
+        - "frequency_separation_MHz < 5.0"
+        - "valley_depth_between_peaks_dB < 6.0"
+        - "separation_less_than_half_main_peak_width"
+
+      valley_depth_definition: "20*log10(min(A_left,A_right)/A_valley)"
+      min_valley_depth_for_independent_peaks_dB: 6.0
+
+      peak_width_method: "half_prominence_width"
+      width_merge_factor: 0.5
+
+      cluster_representative:
+        method: "highest_amplitude_local_maximum_in_cluster"
+
+      output_fields:
+        - "independent_peak_count"
+        - "peak_cluster_id"
+        - "peak_cluster_width_MHz"
+        - "peak_cluster_valley_depth_dB"
+
+  # ------------------------------------------------------------
+  # f1/f2 definitions
+  # ------------------------------------------------------------
+  # f1 is the highest-amplitude independent clear peak.
+  # f2 is the second-highest-amplitude independent clear peak excluding f1.
+  # fdom is the dominant independent peak with maximum amplitude.
+  # ------------------------------------------------------------
+
+  f1:
+    name: "fundamental_independent_peak"
+    method: "highest_amplitude_independent_clear_peak"
+    description: "f1 is the highest-amplitude independent clear peak that passes prominence and SNR thresholds."
+
+    candidate_requirements:
+      min_prominence_dB: 3.0
+      min_relative_height_to_global_max: 0.08
+      min_SNR_dB: 6.0
+      must_not_be_shoulder_of_higher_peak: true
+
+    if_no_valid_fundamental_peak:
+      fallback_method: "dominant_independent_peak"
+      warning_flag: "f1_fallback_to_dominant_peak"
+
+  f2:
+    name: "second_independent_peak"
+    method: "second_highest_amplitude_independent_peak_excluding_f1"
+    description: "f2 is selected from independent peak clusters, not from small local fluctuations within the same peak."
+
+    candidate_requirements:
+      must_be_different_cluster_from_f1: true
+      min_frequency_separation_from_f1_MHz: 5.0
+      min_valley_depth_from_f1_cluster_dB: 6.0
+      min_prominence_dB: 3.0
+      min_relative_height_to_global_max: 0.08
+
+    selection_priority:
+      - "second_highest_amplitude_independent_peak_excluding_f1"
+
+    if_no_valid_second_independent_peak:
+      f2_MHz: "NaN"
+      A2: "NaN"
+      warning_flag: "no_second_independent_peak"
+
+  fdom:
+    enabled: true
+    method: "highest_amplitude_independent_peak"
+    output_fields:
+      - "fdom_MHz"
+      - "Adom"
+
+  shoulder_peak_handling:
+    enabled: true
+    mark_shoulder_peaks: true
+    exclude_shoulder_peaks_from_f1_f2: true
+
+    shoulder_if_any:
+      - "belongs_to_same_peak_cluster"
+      - "valley_depth_to_neighbor_peak_dB < 6.0"
+      - "frequency_separation_to_neighbor_MHz < 5.0"
+
+    output_field: "shoulder_peak_flag"
+
+  if_no_peak_found:
+    f1_MHz: "NaN"
+    A1: "NaN"
+    f2_MHz: "NaN"
+    A2: "NaN"
+    fdom_MHz: "NaN"
+    Adom: "NaN"
+    analysis_status: "feature_extract_failed"
+    warning_flag: "weak_main_peak"
+
+PSR:
+  enabled: true
+
+  # Keep original field name but clarify meaning:
+  # PSR is based on f1 and f2 only if both are independent peaks.
+  formula: "20*log10(A1/A2)"
+  require_f1_f2_independent: true
+
+  if_A2_invalid: "NaN"
+  if_f2_not_independent: "NaN"
+
+  output_unit: "dB"
+
+  additional_fields:
+    save_dominant_peak_ratio: true
+    dominant_peak_ratio_field: "DPR_dB"
+    dominant_peak_ratio_formula: "20*log10(Adom/A_next_independent)"
+
+# ----------------------------------------------------------------------
+# 13. fsrc reference and tracking
+# ----------------------------------------------------------------------
+
+fsrc_tracking:
+  enabled: true
+
+  reference_group: "G3_D0p3m_L1Mohm_Gshort"
+  reference_method: "median_f1_from_A_or_B_waveforms"
+  fallback_reference_method: "median_f1_from_all_success_waveforms_in_reference_group"
+
+  reference_quality_priority:
+    - "excellent"
+    - "usable"
+
+  strict_tolerance_percent: 5.0
+  loose_tolerance_percent: 10.0
+
+  search_window_around_fsrc_percent: 10.0
+  minimum_trackable_SNR_dB: 6.0
+  minimum_trackable_prominence_dB: 3.0
+
+  output_fields:
+    - "fsrc_MHz"
+    - "A_fsrc"
+    - "f1_to_fsrc_diff_percent"
+    - "fsrc_trackable"
+
+  if_reference_missing:
+    fsrc_MHz: "NaN"
+    A_fsrc: "NaN"
+    f1_to_fsrc_diff_percent: "NaN"
+    fsrc_trackable: false
+    warning_flag: "fsrc_reference_missing"
+
+# ----------------------------------------------------------------------
+# 14. Narrowband SNR
+# ----------------------------------------------------------------------
+
+narrowband_SNR:
+  enabled: true
+
+  method: "frequency_domain_power_ratio"
+
+  signal_band:
+    center: "f1_MHz"
+    half_width_MHz: 2.0
+
+  noise_band:
+    mode: "adaptive_excluding_signal_and_peaks"
+    fallback_absolute_band_MHz:
+      min: 150.0
+      max: 300.0
+    exclude_signal_band_from_noise: true
+    exclude_peak_neighborhood_MHz: 3.0
+    min_noise_band_width_MHz: 10.0
+
+  formula: "10*log10(P_signal_band/P_noise_band)"
+  output_unit: "dB"
+
+  if_noise_band_invalid: "NaN"
+  warning_flag_if_noise_invalid: "invalid_noise_band"
+
+# ----------------------------------------------------------------------
+# 15. Damped-sine fitting
+# ----------------------------------------------------------------------
+
+damping_fit:
+  enabled: true
+
+  model: "damped_sine"
+  equation: "v(t)=C+A*exp(-alpha*t_rel)*sin(2*pi*f*t_rel+phi)"
+  use_relative_time_in_fit: true
+  relative_time_zero: "fit_window_start"
+
+  fit_window:
+    source: "main_burst"
+    start: "burst_start_s"
+    end: "burst_end_s"
+    max_duration_s: 2.0e-6
+    min_duration_s: 5.0e-8
+    min_points: 20
+
+  initial_guess:
+    frequency_source: "f1_MHz"
+    amplitude_source: "Apk"
+    alpha_initial: 1.0e7
+    offset_initial: 0.0
+    phase_initial: 0.0
+
+  parameter_bounds:
+    A:
+      min: 0.0
+      max: "inf"
+    alpha:
+      min: 0.0
+      max: 1.0e10
+    frequency_Hz:
+      min: 1.0e6
+      max: 3.0e8
+    phi:
+      min: -6.283185307
+      max: 6.283185307
+    C:
+      min: "-inf"
+      max: "inf"
+
+  fitting_algorithm: "scipy_curve_fit"
+  max_iterations: 20000
+
+  output:
+    alpha_unit: "1/s"
+    save_fit_R2: true
+    save_fit_figure: true
+
+  if_fit_failed:
+    alpha: "NaN"
+    fit_R2: "NaN"
+    analysis_status: "fit_failed"
+    warning_flag: "fit_failed"
+
+# ----------------------------------------------------------------------
+# 16. Template correlation
+# ----------------------------------------------------------------------
+
+template_correlation:
+  enabled: true
+
+  # ------------------------------------------------------------
+  # Template selection priority
+  # ------------------------------------------------------------
+  # Priority:
+  #   0. manual_template if specified in the initial prompt or config
+  #   1. auto medoid from G3_D0p3m_L1Mohm_Gshort
+  #   2. auto medoid from G4_D0p3m_L50ohm_Gcoax
+  #   3. auto fallback medoid from available non-G2 data
+  #   4. low-confidence fallback from G2 only if no other data exists
+  #
+  # Important:
+  #   If a valid manual template is specified, skip automatic template selection.
+  #   If manual template is specified but invalid, do not silently fall back.
+  # ------------------------------------------------------------
+
+  manual_template:
+    enabled: false
+    allow_prompt_override: true
+
+    # The user may specify either manual_template_file_id or manual_template_file_path
+    # in the initial prompt.
+    manual_template_file_id: null
+    manual_template_file_path: null
+
+    skip_auto_selection_if_valid: true
+    validate_manual_template: true
+
+    validation_requirements:
+      file_exists: true
+      can_be_loaded: true
+      can_be_normalized: true
+      has_time_s: true
+      has_voltage_V: true
+      min_record_length: 20
+      no_nan_or_inf: true
+
+    on_invalid_manual_template: "stop_template_stage_and_mark_error"
+    invalid_manual_template_status: "manual_template_invalid"
+    invalid_manual_template_warning_flag: "manual_template_invalid"
+
+  template_source:
+    mode: "two_pass_auto_medoid_with_manual_override"
+
+    reference_group_priority:
+      - "G3_D0p3m_L1Mohm_Gshort"
+      - "G4_D0p3m_L50ohm_Gcoax"
+
+    primary_reference_group: "G3_D0p3m_L1Mohm_Gshort"
+    secondary_reference_group: "G4_D0p3m_L50ohm_Gcoax"
+
+    fallback_if_reference_groups_missing: true
+    fallback_mode: "global_candidate_medoid"
+
+  # ------------------------------------------------------------
+  # First-pass candidate screening
+  # ------------------------------------------------------------
+  # This pass must not use rho, because rho itself depends on the template.
+  # ------------------------------------------------------------
+
+  two_pass_strategy:
+    enabled: true
+
+    first_pass_features_without_rho:
+      - "parse_status"
+      - "analysis_status"
+      - "included"
+      - "Apk"
+      - "f1_MHz"
+      - "PSR_dB"
+      - "narrowband_SNR_dB"
+      - "fit_R2"
+      - "num_bursts"
+      - "single_burst"
+      - "envelope_monotonic"
+      - "clipped"
+      - "saturated"
+      - "aliasing_flag"
+      - "reignition_flag"
+      - "multiburst_flag"
+      - "overdamped_flag"
+      - "nonoscillatory_flag"
+      - "echo_flag"
+      - "multi_peak_flag"
+      - "beating_flag"
+      - "period_drift_flag"
+
+    second_pass_features_with_rho:
+      - "rho"
+      - "waveform_class"
+      - "quality_label"
+      - "pass_flag"
+
+  candidate_filter:
+    included_must_equal: 1
+    parse_status_must_equal: "success"
+    analysis_status_allowed:
+      - "success"
+      - "fit_failed"
+
+    require_valid_time_voltage: true
+    require_valid_f1: true
+    require_valid_Apk: true
+
+    exclude_if_any_true:
+      - "clipped"
+      - "saturated"
+      - "aliasing_flag"
+      - "reignition_flag"
+      - "multiburst_flag"
+
+    prefer_if_true:
+      - "single_burst"
+      - "envelope_monotonic"
+
+    numeric_thresholds:
+      min_PSR_dB: 10.0
+      min_narrowband_SNR_dB: 10.0
+      min_fit_R2_preferred: 0.70
+      min_record_length: 20
+
+    relaxed_numeric_thresholds:
+      min_PSR_dB: 6.0
+      min_narrowband_SNR_dB: 6.0
+      min_fit_R2_preferred: 0.50
+
+    min_candidates_preferred: 10
+    min_candidates_allowed: 3
+
+    if_candidates_less_than_preferred: "use_relaxed_filter_and_warn"
+    if_candidates_less_than_allowed: "use_best_single_waveform_and_warn"
+
+  # ------------------------------------------------------------
+  # Fallback candidate pool
+  # ------------------------------------------------------------
+  # Used only when both primary and secondary reference groups have no usable data.
+  # ------------------------------------------------------------
+
+  fallback_candidate_pool:
+    enabled: true
+
+    group_priority:
+      - config_group: "G3"
+        distance_priority_m: [0.3, 0.6, 0.8]
+        confidence: "high"
+      - config_group: "G4"
+        distance_priority_m: [0.3, 0.6, 0.8]
+        confidence: "medium_high"
+      - config_group: "G1"
+        distance_priority_m: [0.3, 0.6, 0.8]
+        confidence: "medium"
+      - config_group: "G2"
+        distance_priority_m: [0.3, 0.6, 0.8]
+        confidence: "low"
+
+    avoid_config_groups_if_possible:
+      - "G2"
+
+    use_G2_only_if_no_non_G2_candidate_exists: true
+    if_G2_used:
+      template_confidence: "low"
+      warning_flag: "low_confidence_template_from_G2"
+      notes: "G2 is a probe-loop artifact test group and should only be used as last-resort template."
+
+    ranking_score:
+      enabled: true
+      formula_description: "Higher score means better template candidate."
+      components:
+        PSR_dB:
+          weight: 0.25
+          direction: "higher_better"
+        narrowband_SNR_dB:
+          weight: 0.25
+          direction: "higher_better"
+        fit_R2:
+          weight: 0.20
+          direction: "higher_better"
+        single_burst:
+          weight: 0.10
+          direction: "true_better"
+        envelope_monotonic:
+          weight: 0.10
+          direction: "true_better"
+        no_distortion_flags:
+          weight: 0.10
+          direction: "true_better"
+
+    fallback_selection_method:
+      if_candidate_N_ge_min_candidates_allowed: "medoid_waveform_after_alignment"
+      if_candidate_N_lt_min_candidates_allowed: "best_ranked_single_waveform"
+
+  template_building:
+    method: "medoid_waveform_after_alignment"
+
+    alignment_method: "peak_time"
+    alignment_reference_field: "t_Apk_s"
+    max_alignment_shift_s: 5.0e-8
+
+    normalize_before_distance: true
+    normalize_before_correlation: true
+    normalization_method: "max_abs"
+
+    distance_metric: "euclidean_after_alignment"
+    medoid_definition: "candidate waveform with minimum total distance to all other candidate waveforms"
+
+    min_waveforms_for_medoid: 3
+    if_single_candidate_only: "use_single_candidate_as_template_and_warn"
+
+  correlation:
+    method: "pearson"
+    use_analysis_window: true
+    allow_small_lag_search: true
+    max_lag_s: 5.0e-8
+    normalize_before_correlation: true
+
+  output:
+    output_field: "rho"
+
+    save_template_dir: "template"
+    save_selected_template_waveform: true
+    selected_template_waveform_csv: "template/selected_template_waveform.csv"
+
+    save_template_selection_table: true
+    template_selection_csv: "template/template_selection.csv"
+
+    save_template_candidate_table: true
+    template_candidates_csv: "template/template_candidates.csv"
+
+    save_template_overlay_check: true
+    template_overlay_check_figure: "template/template_overlay_check.png"
+
+  template_selection_table_fields:
+    - "run_id"
+    - "template_mode"
+    - "manual_template_used"
+    - "reference_group"
+    - "fallback_level"
+    - "template_confidence"
+    - "template_method"
+    - "candidate_N"
+    - "selected_template_file_id"
+    - "selected_template_file_name"
+    - "selected_template_file_path"
+    - "selected_template_normalized_path"
+    - "fallback_used"
+    - "fallback_reason"
+    - "warning_flag"
+    - "status"
+    - "notes"
+
+  if_template_missing:
+    rho: "NaN"
+    warning_flag: "template_missing"
+    template_confidence: "none"
+    status: "template_missing"
+
+  if_template_invalid:
+    rho: "NaN"
+    warning_flag: "template_invalid"
+    template_confidence: "none"
+    status: "template_invalid"
+    
+# ----------------------------------------------------------------------
+# 17. Measurement-chain sensitivity metrics
+# ----------------------------------------------------------------------
+
+measurement_chain_checks:
+  enabled: true
+
+  G2_artifact_check:
+    enabled: true
+    config_group: "G2"
+    reference_group_for_comparison: "G1"
+    reference_distance_m: 0.8
+    frequency_match_strict_percent: 5.0
+    frequency_match_loose_percent: 10.0
+    strong_ringing_min_PSR_dB: 10.0
+    strong_ringing_min_SNR_dB: 10.0
+    strong_ringing_min_fit_R2: 0.90
+    output_field: "measurement_chain_sensitive"
+
+  ground_sensitivity:
+    enabled: true
+    f1_shift_significant_percent: 5.0
+    alpha_shift_significant_percent: 10.0
+    pass_rate_shift_percentage_points: 20.0
+    output_field: "ground_sensitive"
+
+  loading_sensitivity:
+    enabled: true
+    compare_pairs:
+      - group_a: "G1"
+        group_b: "G4"
+    f1_shift_significant_percent: 5.0
+    alpha_shift_significant_percent: 10.0
+    pass_rate_shift_percentage_points: 20.0
+    output_field: "loading_sensitive"
+
+  receiver_self_response:
+    enabled: true
+    requires_vna_table: false
+    vna_table_optional: true
+    output_field: "receiver_self_response_suspected"
+
+# ----------------------------------------------------------------------
+# 18. Quality control flags
+# ----------------------------------------------------------------------
+
+quality_control_flags:
+  enabled: true
+
+  low_snr_threshold_dB: 6.0
+  weak_main_peak_PSR_threshold_dB: 6.0
+  low_template_corr_threshold: 0.60
+  low_fit_R2_threshold: 0.60
+
+  main_warning_priority:
+    - "read_or_parse_failed"
+    - "clipped"
+    - "saturated"
+    - "aliasing"
+    - "reignition_or_multiburst"
+    - "pseudo_artifact_suspected"
+    - "echo_or_multipath"
+    - "multi_peak"
+    - "beating"
+    - "period_drift"
+    - "overdamped_or_nonoscillatory"
+    - "low_snr"
+    - "weak_main_peak"
+    - "fit_failed"
+    - "template_low_corr"
+    - "template_missing"
+    - "metadata_conflict"
+    - "undefined_group"
+    - "no_second_peak"
+    - "none"
+
+# ----------------------------------------------------------------------
+# 19. Single-waveform output fields
+# ----------------------------------------------------------------------
+
+single_waveform_output:
+  fields:
+    - "run_id"
+    - "file_id"
+    - "file_name"
+    - "file_path"
+    - "normalized_file_path"
+    - "detected_format"
+    - "loader_used"
+    - "experiment_id"
+    - "date"
+    - "group_id"
+    - "config_group"
+    - "distance_m"
+    - "load_condition"
+    - "ground_condition"
+    - "block_id"
+    - "sample_index"
+    - "time_unit"
+    - "voltage_unit"
+    - "start_time_s"
+    - "time_increment_s"
+    - "sampling_rate_Hz"
+    - "record_length"
+    - "baseline_V"
+    - "nan_fraction"
+    - "Apk"
+    - "Amin"
+    - "App"
+    - "t_Apk_s"
+    - "f1_MHz"
+    - "A1"
+    - "f2_MHz"
+    - "A2"
+    - "PSR_dB"
+    - "narrowband_SNR_dB"
+    - "alpha"
+    - "rho"
+    - "fit_R2"
+    - "burst_start_s"
+    - "burst_end_s"
+    - "num_bursts"
+    - "single_burst"
+    - "envelope_monotonic"
+    - "front_glitch_flag"
+    - "tail_disturbance_flag"
+    - "reignition_flag"
+    - "multiburst_flag"
+    - "overdamped_flag"
+    - "nonoscillatory_flag"
+    - "clipped"
+    - "saturated"
+    - "aliasing_flag"
+    - "overdrive_recovery_flag"
+    - "echo_flag"
+    - "delayed_echo_detected"
+    - "multi_peak_flag"
+    - "beating_flag"
+    - "period_drift_flag"
+    - "f2_relation"
+    - "fsrc_MHz"
+    - "A_fsrc"
+    - "f1_to_fsrc_diff_percent"
+    - "fsrc_trackable"
+    - "measurement_chain_sensitive"
+    - "ground_sensitive"
+    - "loading_sensitive"
+    - "waveform_class"
+    - "quality_label"
+    - "pass_flag"
+    - "reject_reason"
+    - "main_warning_flag"
+    - "classification_rule_version"
+    - "figure_time_path"
+    - "figure_freq_path"
+    - "figure_fit_path"
+    - "analysis_status"
+    - "notes"
+
+# ----------------------------------------------------------------------
+# 20. Statistics
+# ----------------------------------------------------------------------
+
+statistics:
+  enabled: true
+
+  group_by:
+    - "group_id"
+
+  include_only:
+    included_equals: 1
+
+  formal_statistics_inclusion_source: "classification_rules.yaml"
+
+  central_tendency:
+    primary: "median"
+    secondary:
+      - "mean"
+
+  IQR:
+    enabled: true
+    definition: "Q3-Q1"
+
+  CV:
+    enabled: true
+    definition: "sample_std/mean*100"
+    ddof: 1
+    if_mean_abs_below: 1.0e-12
+    output_if_invalid: "NaN"
+
+  ratios:
+    denominator: "N_total"
+    output_unit: "percent"
+
+  statistics_fields:
+    - "f1_MHz"
+    - "alpha"
+    - "Apk"
+    - "PSR_dB"
+    - "narrowband_SNR_dB"
+    - "rho"
+    - "fit_R2"
+
+  optional_bootstrap_CI:
+    enabled: false
+    n_bootstrap: 2000
+    confidence_level: 0.95
+    random_seed: 20260428
+
+  group_decision_source: "classification_rules.yaml"
+
+# ----------------------------------------------------------------------
+# 21. Output
+# ----------------------------------------------------------------------
+
+output:
+  save_csv: true
+  save_excel: true
+  save_figures: true
+  save_logs: true
+  save_report: true
+
+  figure_formats:
+    - "png"
+
+  csv_float_format: "%.10g"
+  excel_float_format: "0.000000"
+
+  normalized_waveform_dir: "normalized_waveform/normalized_csv"
+  format_detection_summary_csv: "normalized_waveform/format_detection_summary.csv"
+
+  single_waveform_features_csv: "single_waveform/single_waveform_features.csv"
+  single_waveform_labels_csv: "single_waveform/single_waveform_labels.csv"
+  group_statistics_csv: "group_summary/group_statistics.csv"
+  group_quality_summary_csv: "group_summary/group_quality_summary.csv"
+  config_snapshot_csv: "config_snapshot/config_snapshot.csv"
+  error_files_csv: "logs/error_files.csv"
+  excluded_files_csv: "logs/excluded_files.csv"
+  excel_summary_xlsx: "excel_report/waveform_analysis_summary.xlsx"
+  quick_report_md: "report/quick_report.md"
+  quick_report_pdf: "report/quick_report.pdf"
+
+excel:
+  enabled: true
+  workbook_name: "waveform_analysis_summary.xlsx"
+
+  sheets:
+    README: "auto_generated"
+    sample_index: "01_metadata/sample_index.csv"
+    format_detection_summary: "normalized_waveform/format_detection_summary.csv"
+    single_waveform_features: "single_waveform/single_waveform_features.csv"
+    single_waveform_labels: "single_waveform/single_waveform_labels.csv"
+    group_statistics: "group_summary/group_statistics.csv"
+    group_quality_summary: "group_summary/group_quality_summary.csv"
+    error_files: "logs/error_files.csv"
+    excluded_files: "logs/excluded_files.csv"
+    config_snapshot: "config_snapshot/config_snapshot.csv"
+
+  freeze_header: true
+  autofilter: true
+  auto_adjust_column_width: true
+
+# ----------------------------------------------------------------------
+# 22. Logging and errors
+# ----------------------------------------------------------------------
+
+logging:
+  enabled: true
+  log_file: "logs/run.log"
+  log_level: "INFO"
+
+  must_log:
+    - "run_id"
+    - "start_time"
+    - "end_time"
+    - "python_version"
+    - "package_versions"
+    - "command_line"
+    - "number_of_input_raw_files"
+    - "number_of_parsed_files"
+    - "number_of_normalized_files"
+    - "number_of_success_files"
+    - "number_of_error_files"
+    - "number_of_excluded_files"
+    - "config_files_used"
+    - "metadata_conflict"
+    - "undefined_group"
+    - "filename_parse_failed"
+    - "waveform_format_parse_failed"
+    - "csv_read_failed"
+    - "feature_extract_failed"
+    - "fit_failed"
+    - "classification_failed"
+    - "excel_export_status"
+    - "figure_export_status"
+
+error_handling:
+  continue_on_single_file_error: true
+  write_error_files_csv: true
+  write_excluded_files_csv: true
+
+  error_status_values:
+    - "filename_parse_failed"
+    - "waveform_format_parse_failed"
+    - "csv_read_failed"
+    - "invalid_time_column"
+    - "invalid_voltage_column"
+    - "invalid_experiment_id"
+    - "feature_extract_failed"
+    - "fit_failed"
+    - "classification_failed"
+    - "metadata_conflict"
+    - "undefined_group"
+
+# ----------------------------------------------------------------------
+# 23. Config snapshot and report
+# ----------------------------------------------------------------------
+
+config_snapshot:
+  enabled: true
+
+  copy_files:
+    - source: "02_config/analysis_config.yaml"
+      target: "config_snapshot/analysis_config_used.yaml"
+    - source: "02_config/classification_rules.yaml"
+      target: "config_snapshot/classification_rules_used.yaml"
+    - source: "02_config/plot_style_origin.yaml"
+      target: "config_snapshot/plot_style_origin_used.yaml"
+
+  write_config_snapshot_csv: true
+
+report:
+  quick_report_enabled: true
+  quick_report_pdf_enabled: true
+  if_pdf_export_unavailable: "skip_and_warn"
+
+reproducibility:
+  save_python_version: true
+  save_package_versions: true
+  save_command_line: true
+  save_run_time: true
+  save_git_hash_if_available: true
+
+# ----------------------------------------------------------------------
+# 25. distance_S001_comparison
+# ----------------------------------------------------------------------
+
+distance_S001_comparison:
+  enabled: true
+
+  # ------------------------------------------------------------
+  # Plot type 1:
+  # same config_group, multiple distances, select S001 for each distance
+  # ------------------------------------------------------------
+  same_config_multi_distance:
+    enabled: true
+    trigger_min_distances: 2
+
+    group_by:
+      - "date"
+      - "config_group"
+      - "load_condition"
+      - "ground_condition"
+
+    fixed_sample_index: "S001"
+
+    include_only:
+      included_equals: 1
+      parse_status_equals: "success"
+
+    per_distance_selection:
+      preferred_block_id: "B01"
+      selection_rule_if_multiple_matches: "smallest_block_id_then_lexicographically_smallest_file_name"
+      if_S001_missing_in_distance: "skip_that_distance_and_log"
+
+    distance_sort_order_m:
+      - 0.1
+      - 0.3
+      - 0.6
+      - 0.8
+
+    waveform_source: "normalized_waveform"
+    plot_types:
+      - "time_domain_overlay"
+      - "frequency_domain_overlay"
+
+    alignment:
+      enabled: true
+      method: "peak_time"
+      reference_field: "t_Apk_s"
+      max_shift_s: 5.0e-8
+
+    legend:
+      enabled: true
+      label_mode: "full_waveform_name_without_date"
+      label_format: "{file_id}"
+
+    annotation:
+      enabled: true
+
+    output:
+      output_dir: "group_summary/distance_S001_comparison"
+      index_csv: "group_summary/distance_S001_comparison/distance_S001_comparison_index.csv"
+      filename_pattern_time: "{date}_{config_group}_{load_condition}_{ground_condition}_S001_distance_compare_time"
+      filename_pattern_frequency: "{date}_{config_group}_{load_condition}_{ground_condition}_S001_distance_compare_freq"
+
+    status_values:
+      - "success"
+      - "insufficient_distances"
+      - "missing_S001"
+      - "selection_conflict"
+
+  # ------------------------------------------------------------
+  # Plot type 2:
+  # multiple config_group values, choose the minimum available distance
+  # for each config_group, then compare their S001 waveforms
+  # ------------------------------------------------------------
+  cross_config_min_distance:
+    enabled: true
+    trigger_min_configs: 2
+
+    group_by:
+      - "date"
+      - "load_condition"
+      - "ground_condition"
+
+    fixed_sample_index: "S001"
+
+    include_only:
+      included_equals: 1
+      parse_status_equals: "success"
+
+    config_groups_order:
+      - "G1"
+      - "G2"
+      - "G3"
+      - "G4"
+
+    min_distance_priority_m:
+      - 0.1
+      - 0.3
+      - 0.6
+      - 0.8
+
+    per_config_selection:
+      choose_rule: "smallest_available_distance_with_valid_S001"
+      preferred_block_id: "B01"
+      selection_rule_if_multiple_matches: "smallest_block_id_then_lexicographically_smallest_file_name"
+      if_no_valid_S001_for_config: "skip_that_config_and_log"
+
+    waveform_source: "normalized_waveform"
+    plot_types:
+      - "time_domain_overlay"
+      - "frequency_domain_overlay"
+
+    alignment:
+      enabled: true
+      method: "peak_time"
+      reference_field: "t_Apk_s"
+      max_shift_s: 5.0e-8
+
+    legend:
+      enabled: true
+      label_mode: "full_waveform_name_without_date"
+      label_format: "{file_id}"
+
+    annotation:
+      enabled: true
+
+    output:
+      output_dir: "group_summary/config_min_distance_S001_comparison"
+      index_csv: "group_summary/config_min_distance_S001_comparison/config_min_distance_S001_comparison_index.csv"
+      filename_pattern_time: "{date}_{load_condition}_{ground_condition}_config_min_distance_S001_compare_time"
+      filename_pattern_frequency: "{date}_{load_condition}_{ground_condition}_config_min_distance_S001_compare_freq"
+
+    status_values:
+      - "success"
+      - "insufficient_configs"
+      - "missing_S001"
+      - "selection_conflict"
+
+  # ------------------------------------------------------------
+  # Plot type 3:
+  # multiple config_group values at the same distance, compare S001 waveforms
+  # ------------------------------------------------------------
+  cross_config_same_distance:
+    enabled: true
+    trigger_min_configs: 2
+
+    group_by:
+      - "date"
+      - "distance_m"
+
+    fixed_sample_index: "S001"
+
+    include_only:
+      included_equals: 1
+      parse_status_equals: "success"
+
+    config_groups_order:
+      - "G1"
+      - "G2"
+      - "G3"
+      - "G4"
+
+    per_config_selection:
+      preferred_block_id: "B01"
+      selection_rule_if_multiple_matches: "smallest_block_id_then_lexicographically_smallest_file_name"
+      if_no_valid_S001_for_config: "skip_that_config_and_log"
+
+    waveform_source: "normalized_waveform"
+    plot_types:
+      - "time_domain_overlay"
+      - "frequency_domain_overlay"
+
+    alignment:
+      enabled: true
+      method: "peak_time"
+      reference_field: "t_Apk_s"
+      max_shift_s: 5.0e-8
+
+    legend:
+      enabled: true
+      label_mode: "full_waveform_name_without_date"
+      label_format: "{file_id}"
+
+    annotation:
+      enabled: true
+
+    output:
+      output_dir: "group_summary/config_same_distance_S001_comparison"
+      index_csv: "group_summary/config_same_distance_S001_comparison/config_same_distance_S001_comparison_index.csv"
+      filename_pattern_time: "{date}_{distance_token}_config_same_distance_S001_compare_time"
+      filename_pattern_frequency: "{date}_{distance_token}_config_same_distance_S001_compare_freq"
+
+    status_values:
+      - "success"
+      - "insufficient_configs"
+      - "missing_S001"
+      - "selection_conflict"
+
+# ----------------------------------------------------------------------
+# 26. Smoke test
+# ----------------------------------------------------------------------
+
+smoke_test:
+  enabled: true
+  run_before_full_analysis: true
+  max_files: 5
+  required_checks:
+    - "yaml_parse_ok"
+    - "group_definition_read_ok"
+    - "raw_files_scan_ok"
+    - "format_detection_ok"
+    - "normalization_ok"
+    - "feature_extraction_ok"
+    - "classification_ok"
+    - "single_time_figure_export_ok"
+    - "single_frequency_figure_export_ok"
+    - "required_csv_columns_ok"
+

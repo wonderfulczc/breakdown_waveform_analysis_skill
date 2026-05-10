@@ -1,0 +1,852 @@
+# classification_rules.yaml
+# Purpose:
+#   Waveform classification rules for ML01 based on the project book.
+#   This file defines A/B/C/D/E/F/G/H waveform classes, quality labels,
+#   pass_flag, reject_reason, group decisions, and measurement-chain artifact rules.
+#
+# Scope:
+#   ML01 only.
+#   Experiment 1: measurement-chain artifact exclusion and receiver loading influence check.
+
+project:
+  project_name: "breakdown_waveform_analysis"
+  experiment_id: "ML01"
+  rule_version: "classification_rules_ML01_project_book_v1.0"
+  rule_description: "实验一课题书版波形分类规则"
+  language: "zh-CN"
+
+output_fields:
+  waveform_class_allowed_values:
+    - "A"
+    - "B"
+    - "C"
+    - "D"
+    - "E"
+    - "F"
+    - "G"
+    - "H"
+    - "unknown"
+
+  quality_label_allowed_values:
+    - "excellent"
+    - "usable"
+    - "suspicious"
+    - "unusable"
+    - "unknown"
+
+  pass_flag_allowed_values:
+    - 1
+    - 0
+    - "NaN"
+
+  main_warning_flag_allowed_values:
+    - "none"
+    - "slight_front_glitch"
+    - "tail_disturbance"
+    - "multi_peak"
+    - "beating"
+    - "period_drift"
+    - "reignition_or_multiburst"
+    - "pseudo_artifact_suspected"
+    - "overdamped_or_nonoscillatory"
+    - "clipped"
+    - "saturated"
+    - "aliasing"
+    - "echo_or_multipath"
+    - "low_snr"
+    - "weak_main_peak"
+    - "fit_failed"
+    - "template_low_corr"
+    - "template_missing"
+    - "metadata_conflict"
+    - "undefined_group"
+    - "read_or_parse_failed"
+    - "unclassified"
+
+# ----------------------------------------------------------------------
+# 1. Core thresholds from project book
+# ----------------------------------------------------------------------
+
+thresholds:
+  min_record_length_points: 100
+  max_nan_fraction: 0.01
+
+  # Project-book excellent waveform thresholds
+  excellent:
+    min_PSR_dB: 10.0
+    min_SNRf_dB: 10.0
+    min_rho: 0.85
+    min_fit_R2: 0.90
+
+  # Usable but not high-precision thresholds
+  usable:
+    min_PSR_dB: 10.0
+    min_SNRf_dB: 10.0
+    min_rho: 0.70
+    min_fit_R2: 0.70
+
+  # Suspicious thresholds
+  suspicious:
+    min_PSR_dB: 6.0
+    min_SNRf_dB: 6.0
+    min_rho: 0.60
+    min_fit_R2: 0.60
+
+  # Frequency validity
+  f1_min_MHz: 1.0
+  f1_max_MHz: 200.0
+
+  # fsrc tracking
+  fsrc_tracking:
+    enabled: true
+    strict_tolerance_percent: 5.0
+    loose_tolerance_percent: 10.0
+
+  # System disturbance judgement from project book
+  system_disturbance:
+    f1_change_significant_percent: 5.0
+    alpha_change_significant_percent: 10.0
+    pass_rate_change_significant_percentage_points: 20.0
+
+  # Stability thresholds from project book
+  stability:
+    engineering_good_min_excellent_count_in_10: 8
+    CVf_excellent_percent: 3.0
+    CVf_usable_percent: 5.0
+    CValpha_excellent_percent: 10.0
+    CValpha_usable_percent: 15.0
+    CVApk_excellent_percent: 10.0
+    CVApk_usable_percent: 15.0
+
+  # G2 probe-loop artifact check
+  g2_artifact:
+    enabled: true
+    config_group: "G2"
+    reference_distance_m: 0.8
+    strong_ringing_min_PSR_dB: 10.0
+    strong_ringing_min_SNRf_dB: 10.0
+    strong_ringing_min_fit_R2: 0.90
+    frequency_match_strict_percent: 5.0
+    frequency_match_loose_percent: 10.0
+
+  # Receiver loading judgement
+  loading_effect:
+    compare_group_1: "G1"
+    compare_group_2: "G4"
+    f1_change_significant_percent: 5.0
+    alpha_change_significant_percent: 10.0
+    pass_rate_change_significant_percentage_points: 20.0
+
+# ----------------------------------------------------------------------
+# 2. Expected intermediate flags
+# ----------------------------------------------------------------------
+# Codex should compute or infer these flags from waveform morphology and feature extraction.
+# If a flag cannot be computed, set it to null and do not silently force it to false.
+
+intermediate_flags:
+  time_domain_flags:
+    - "single_burst"
+    - "num_bursts"
+    - "envelope_monotonic"
+    - "front_glitch_flag"
+    - "tail_disturbance_flag"
+    - "reignition_flag"
+    - "multiburst_flag"
+    - "overdamped_flag"
+    - "nonoscillatory_flag"
+    - "clipped"
+    - "saturated"
+    - "aliasing_flag"
+    - "overdrive_recovery_flag"
+    - "echo_flag"
+
+  frequency_domain_flags:
+    - "single_dominant_peak"
+    - "multi_peak_flag"
+    - "beating_flag"
+    - "period_drift_flag"
+    - "weak_main_peak_flag"
+    - "f2_relation"
+    - "fsrc_trackable"
+
+  metadata_flags:
+    - "metadata_conflict"
+    - "undefined_group"
+
+f2_relation_allowed_values:
+  - "independent_peak"
+  - "harmonic"
+  - "noise"
+  - "unknown"
+
+# ----------------------------------------------------------------------
+# 3. Priority order
+# ----------------------------------------------------------------------
+# Higher-risk measurement failure and artifact classes are evaluated first.
+
+priority_order:
+  - "G"
+  - "D"
+  - "H"
+  - "E"
+  - "F"
+  - "C"
+  - "A"
+  - "B"
+  - "unknown"
+
+# ----------------------------------------------------------------------
+# 4. Waveform class definitions based on project book
+# ----------------------------------------------------------------------
+
+waveform_classes:
+
+  A:
+    name: "A_high_quality_underdamped_single_mode"
+    chinese_name: "A类：优质欠阻尼单模"
+    project_book_name: "优质欠阻尼单模"
+    time_domain_feature: "单burst、规则指数衰减正弦"
+    frequency_domain_feature: "单主峰明显，PSR高"
+    initial_property: "目标波形"
+    handling: "进入全部物理分析"
+    quality_label: "excellent"
+    pass_flag: 1
+    reject_reason: ""
+    default_warning_flag: "none"
+    include_in:
+      frequency_statistics: true
+      damping_statistics: true
+      amplitude_statistics: true
+      stability_statistics: true
+      physical_interpretation: true
+    conditions:
+      all:
+        - "analysis_status == 'success'"
+        - "record_length >= thresholds.min_record_length_points"
+        - "single_burst == true"
+        - "num_bursts == 1 OR num_bursts is null"
+        - "envelope_monotonic == true OR envelope_monotonic is null"
+        - "reignition_flag != true"
+        - "multiburst_flag != true"
+        - "clipped != true"
+        - "saturated != true"
+        - "aliasing_flag != true"
+        - "overdrive_recovery_flag != true"
+        - "f1_MHz is finite"
+        - "f1_MHz >= thresholds.f1_min_MHz"
+        - "f1_MHz <= thresholds.f1_max_MHz"
+        - "PSR_dB >= thresholds.excellent.min_PSR_dB"
+        - "narrowband_SNR_dB >= thresholds.excellent.min_SNRf_dB"
+        - "rho >= thresholds.excellent.min_rho"
+        - "fit_R2 >= thresholds.excellent.min_fit_R2"
+        - "alpha is finite"
+        - "alpha > 0"
+      none:
+        - "main_warning_flag == 'metadata_conflict'"
+        - "main_warning_flag == 'undefined_group'"
+        - "main_warning_flag == 'pseudo_artifact_suspected'"
+        - "main_warning_flag == 'echo_or_multipath'"
+        - "main_warning_flag == 'multi_peak'"
+        - "main_warning_flag == 'beating'"
+        - "main_warning_flag == 'period_drift'"
+
+  B:
+    name: "B_slightly_distorted_but_usable"
+    chinese_name: "B类：轻度失真但可用"
+    project_book_name: "轻度失真但可用"
+    time_domain_feature: "有轻微前沿毛刺或尾部扰动，但主体仍单模"
+    frequency_domain_feature: "主峰仍明显，SNR足够"
+    initial_property: "可用"
+    handling: "可用于频率统计，不建议高精度拟合"
+    quality_label: "usable"
+    pass_flag: 1
+    reject_reason: ""
+    default_warning_flag: "slight_front_glitch"
+    include_in:
+      frequency_statistics: true
+      damping_statistics: false
+      amplitude_statistics: true
+      stability_statistics: false
+      physical_interpretation: "limited"
+    conditions:
+      all:
+        - "analysis_status == 'success'"
+        - "record_length >= thresholds.min_record_length_points"
+        - "single_burst == true"
+        - "reignition_flag != true"
+        - "multiburst_flag != true"
+        - "clipped != true"
+        - "saturated != true"
+        - "aliasing_flag != true"
+        - "f1_MHz is finite"
+        - "PSR_dB >= thresholds.usable.min_PSR_dB"
+        - "narrowband_SNR_dB >= thresholds.usable.min_SNRf_dB"
+      any:
+        - "front_glitch_flag == true"
+        - "tail_disturbance_flag == true"
+        - "rho >= thresholds.usable.min_rho"
+        - "fit_R2 >= thresholds.usable.min_fit_R2"
+      none:
+        - "main_warning_flag == 'pseudo_artifact_suspected'"
+        - "main_warning_flag == 'metadata_conflict'"
+        - "main_warning_flag == 'undefined_group'"
+        - "multi_peak_flag == true"
+        - "beating_flag == true"
+
+  C:
+    name: "C_dual_mode_or_beating_competition"
+    chinese_name: "C类：双模/拍频竞争型"
+    project_book_name: "双模/拍频竞争型"
+    time_domain_feature: "包络起伏、拍频、周期漂移"
+    frequency_domain_feature: "两个或多个接近峰"
+    initial_property: "物理多模或接收端复合振荡"
+    handling: "单独归档，不直接算稳定性"
+    quality_label: "suspicious"
+    pass_flag: 0
+    reject_reason: "dual_mode_or_beating_competition"
+    default_warning_flag: "multi_peak"
+    include_in:
+      frequency_statistics: false
+      damping_statistics: false
+      amplitude_statistics: false
+      stability_statistics: false
+      physical_interpretation: "phenomenon_only"
+    conditions:
+      all:
+        - "analysis_status == 'success'"
+        - "record_length >= thresholds.min_record_length_points"
+      any:
+        - "multi_peak_flag == true"
+        - "beating_flag == true"
+        - "period_drift_flag == true"
+        - "f2_relation == 'independent_peak'"
+        - "PSR_dB < thresholds.usable.min_PSR_dB"
+      none:
+        - "clipped == true"
+        - "saturated == true"
+        - "aliasing_flag == true"
+        - "reignition_flag == true"
+        - "multiburst_flag == true"
+
+  D:
+    name: "D_multiple_pulse_or_reignition"
+    chinese_name: "D类：多脉冲/重燃型"
+    project_book_name: "多脉冲/重燃型"
+    time_domain_feature: "多个burst、二次击穿、毛刺串"
+    frequency_domain_feature: "宽带抬升，主峰不稳定"
+    initial_property: "放电过程不稳"
+    handling: "归入源端/间隙类异常"
+    quality_label: "unusable"
+    pass_flag: 0
+    reject_reason: "multiple_pulse_or_reignition"
+    default_warning_flag: "reignition_or_multiburst"
+    include_in:
+      frequency_statistics: false
+      damping_statistics: false
+      amplitude_statistics: false
+      stability_statistics: false
+      physical_interpretation: false
+    conditions:
+      any:
+        - "reignition_flag == true"
+        - "multiburst_flag == true"
+        - "num_bursts >= 2"
+        - "main_warning_flag == 'reignition_or_multiburst'"
+
+  E:
+    name: "E_pseudo_ringing"
+    chinese_name: "E类：伪振铃型"
+    project_book_name: "伪振铃型"
+    time_domain_feature: "看起来过于干净，但与探头/接地条件强相关"
+    frequency_domain_feature: "固定假峰，频率对测量链敏感"
+    initial_property: "测量干扰高疑"
+    handling: "单独标红，不计入物理结论"
+    quality_label: "suspicious"
+    pass_flag: 0
+    reject_reason: "pseudo_ringing_measurement_chain_artifact"
+    default_warning_flag: "pseudo_artifact_suspected"
+    include_in:
+      frequency_statistics: false
+      damping_statistics: false
+      amplitude_statistics: false
+      stability_statistics: false
+      physical_interpretation: false
+    conditions:
+      any:
+        - "main_warning_flag == 'pseudo_artifact_suspected'"
+        - "measurement_chain_sensitive == true"
+        - "ground_sensitive == true"
+        - "loading_sensitive == true"
+        - all:
+            - "config_group == 'G2'"
+            - "single_burst == true"
+            - "PSR_dB >= thresholds.g2_artifact.strong_ringing_min_PSR_dB"
+            - "narrowband_SNR_dB >= thresholds.g2_artifact.strong_ringing_min_SNRf_dB"
+            - "fit_R2 >= thresholds.g2_artifact.strong_ringing_min_fit_R2"
+
+  F:
+    name: "F_overdamped_or_nonoscillatory"
+    chinese_name: "F类：过阻尼/非振荡型"
+    project_book_name: "过阻尼/非振荡型"
+    time_domain_feature: "单脉冲后快速归零，无稳定正弦尾巴"
+    frequency_domain_feature: "无清晰窄峰"
+    initial_property: "参数区不在欠阻尼区或接收过载"
+    handling: "仅记录，不用于"
+    quality_label: "unusable"
+    pass_flag: 0
+    reject_reason: "overdamped_or_nonoscillatory"
+    default_warning_flag: "overdamped_or_nonoscillatory"
+    include_in:
+      frequency_statistics: false
+      damping_statistics: false
+      amplitude_statistics: false
+      stability_statistics: false
+      physical_interpretation: false
+    conditions:
+      any:
+        - "overdamped_flag == true"
+        - "nonoscillatory_flag == true"
+        - "main_warning_flag == 'overdamped_or_nonoscillatory'"
+        - all:
+            - "f1_MHz is not finite"
+            - "PSR_dB is not finite"
+            - "record_length >= thresholds.min_record_length_points"
+
+  G:
+    name: "G_clipped_saturated_or_aliased"
+    chinese_name: "G类：削顶/饱和/混叠型"
+    project_book_name: "削顶/饱和/混叠型"
+    time_domain_feature: "波形顶部平、台阶、采样锯齿"
+    frequency_domain_feature: "高频假峰或折叠"
+    initial_property: "测量链失真"
+    handling: "直接剔除"
+    quality_label: "unusable"
+    pass_flag: 0
+    reject_reason: "clipped_saturated_or_aliased"
+    default_warning_flag: "clipped"
+    include_in:
+      frequency_statistics: false
+      damping_statistics: false
+      amplitude_statistics: false
+      stability_statistics: false
+      physical_interpretation: false
+    conditions:
+      any:
+        - "clipped == true"
+        - "saturated == true"
+        - "aliasing_flag == true"
+        - "main_warning_flag == 'clipped'"
+        - "main_warning_flag == 'saturated'"
+        - "main_warning_flag == 'aliasing'"
+
+  H:
+    name: "H_echo_or_multipath_tail"
+    chinese_name: "H类：回波/多径拖尾型"
+    project_book_name: "回波/多径拖尾型"
+    time_domain_feature: "主burst后出现延迟回波"
+    frequency_domain_feature: "主峰旁带或延迟相关结构"
+    initial_property: "环境影响"
+    handling: "先改环境后再测"
+    quality_label: "suspicious"
+    pass_flag: 0
+    reject_reason: "echo_or_multipath_tail"
+    default_warning_flag: "echo_or_multipath"
+    include_in:
+      frequency_statistics: false
+      damping_statistics: false
+      amplitude_statistics: false
+      stability_statistics: false
+      physical_interpretation: "environment_artifact"
+    conditions:
+      any:
+        - "echo_flag == true"
+        - "main_warning_flag == 'echo_or_multipath'"
+        - "delayed_echo_detected == true"
+
+  unknown:
+    name: "unknown_unclassified"
+    chinese_name: "未知类：未能稳定分类"
+    project_book_name: "未知"
+    time_domain_feature: "未能归入A-H"
+    frequency_domain_feature: "未能归入A-H"
+    initial_property: "未分类"
+    handling: "人工复核"
+    quality_label: "unknown"
+    pass_flag: "NaN"
+    reject_reason: "unclassified"
+    default_warning_flag: "unclassified"
+    include_in:
+      frequency_statistics: false
+      damping_statistics: false
+      amplitude_statistics: false
+      stability_statistics: false
+      physical_interpretation: false
+    conditions:
+      default: true
+
+# ----------------------------------------------------------------------
+# 5. Read/parse failure rule
+# ----------------------------------------------------------------------
+# Important:
+#   Project-book class G is reserved for clipped/saturated/aliased waveforms.
+#   Read/parse failure should not be labeled as G unless waveform distortion is confirmed.
+
+read_parse_failure:
+  quality_label: "unusable"
+  pass_flag: 0
+  waveform_class: "unknown"
+  reject_reason: "read_or_parse_failure"
+  main_warning_flag: "read_or_parse_failed"
+  conditions:
+    any:
+      - "analysis_status == 'filename_parse_failed'"
+      - "analysis_status == 'csv_read_failed'"
+      - "analysis_status == 'invalid_time_column'"
+      - "analysis_status == 'invalid_voltage_column'"
+      - "analysis_status == 'invalid_experiment_id'"
+      - "analysis_status == 'feature_extract_failed'"
+      - "record_length < thresholds.min_record_length_points"
+
+# ----------------------------------------------------------------------
+# 6. Quality label mapping
+# ----------------------------------------------------------------------
+
+quality_label_mapping:
+  excellent:
+    chinese_name: "优质"
+    include_in_formal_statistics: true
+    pass_flag: 1
+    typical_classes:
+      - "A"
+
+  usable:
+    chinese_name: "可用"
+    include_in_formal_statistics: true
+    pass_flag: 1
+    typical_classes:
+      - "B"
+
+  suspicious:
+    chinese_name: "可疑"
+    include_in_formal_statistics: false
+    pass_flag: 0
+    typical_classes:
+      - "C"
+      - "E"
+      - "H"
+
+  unusable:
+    chinese_name: "不可用"
+    include_in_formal_statistics: false
+    pass_flag: 0
+    typical_classes:
+      - "D"
+      - "F"
+      - "G"
+
+  unknown:
+    chinese_name: "未知"
+    include_in_formal_statistics: false
+    pass_flag: "NaN"
+    typical_classes:
+      - "unknown"
+
+# ----------------------------------------------------------------------
+# 7. Formal statistics inclusion rule
+# ----------------------------------------------------------------------
+
+formal_statistics:
+  # Main formal waveform set
+  include_quality_labels:
+    - "excellent"
+    - "usable"
+
+  exclude_quality_labels:
+    - "suspicious"
+    - "unusable"
+    - "unknown"
+
+  # Class-level inclusion
+  include_waveform_classes:
+    - "A"
+    - "B"
+
+  exclude_waveform_classes:
+    - "C"
+    - "D"
+    - "E"
+    - "F"
+    - "G"
+    - "H"
+    - "unknown"
+
+  # Per-parameter recommendation based on project book
+  parameter_specific_inclusion:
+    f1_MHz:
+      include_classes:
+        - "A"
+        - "B"
+    alpha:
+      include_classes:
+        - "A"
+    Apk:
+      include_classes:
+        - "A"
+        - "B"
+    stability:
+      include_classes:
+        - "A"
+
+  excluded_files_action:
+    write_to_excluded_files_csv: true
+    keep_in_single_waveform_features: true
+    keep_in_single_waveform_labels: true
+    exclude_from_group_statistics_values: true
+    include_in_quality_ratio: true
+
+# ----------------------------------------------------------------------
+# 8. Reject reason dictionary
+# ----------------------------------------------------------------------
+
+reject_reasons:
+  "":
+    meaning: "通过，无剔除原因"
+
+  dual_mode_or_beating_competition:
+    meaning: "双模、拍频或周期漂移，单独归档，不直接算稳定性"
+
+  multiple_pulse_or_reignition:
+    meaning: "多burst、二次击穿、重燃或毛刺串"
+
+  pseudo_ringing_measurement_chain_artifact:
+    meaning: "疑似探头、地线、终端负载或接收链伪振铃"
+
+  overdamped_or_nonoscillatory:
+    meaning: "过阻尼或非振荡型，无稳定正弦尾巴"
+
+  clipped_saturated_or_aliased:
+    meaning: "削顶、饱和、混叠或采样失真"
+
+  echo_or_multipath_tail:
+    meaning: "回波或多径拖尾"
+
+  read_or_parse_failure:
+    meaning: "文件读取、解析或核心特征提取失败"
+
+  unclassified:
+    meaning: "未能稳定归入A-H类别"
+
+# ----------------------------------------------------------------------
+# 9. Group-level ML01 judgement rules
+# ----------------------------------------------------------------------
+
+group_decision:
+  enabled: true
+
+  metrics:
+    excellent_ratio_percent: "N_excellent / N_total * 100"
+    usable_ratio_percent: "N_usable / N_total * 100"
+    suspicious_ratio_percent: "N_suspicious / N_total * 100"
+    unusable_ratio_percent: "N_unusable / N_total * 100"
+    pass_ratio_percent: "N_pass / N_total * 100"
+
+  decisions:
+
+    recommended:
+      chinese_name: "推荐用于后续分析"
+      conditions:
+        all:
+          - "pass_ratio_percent >= 80"
+          - "unusable_ratio_percent <= 10"
+          - "suspicious_ratio_percent <= 20"
+          - "N_analyzed >= 10"
+
+    usable_with_caution:
+      chinese_name: "可用但需谨慎"
+      conditions:
+        all:
+          - "pass_ratio_percent >= 60"
+          - "unusable_ratio_percent <= 25"
+          - "N_analyzed >= 10"
+
+    suspicious_group:
+      chinese_name: "组级可疑"
+      conditions:
+        any:
+          - "suspicious_ratio_percent > 30"
+          - "C_count / N_total * 100 > 20"
+          - "E_count / N_total * 100 > 20"
+          - "H_count / N_total * 100 > 20"
+
+    not_recommended:
+      chinese_name: "不推荐用于正式统计"
+      conditions:
+        any:
+          - "pass_ratio_percent < 60"
+          - "unusable_ratio_percent > 25"
+          - "N_analyzed < 5"
+
+  default_decision: "manual_review_required"
+
+# ----------------------------------------------------------------------
+# 10. Experiment-1 measurement-chain judgement rules
+# ----------------------------------------------------------------------
+
+experiment1_judgement:
+  enabled: true
+
+  probe_ringing_significant:
+    chinese_name: "探头振铃显著"
+    rule_type: "satisfy_at_least_two"
+    minimum_conditions_required: 2
+    conditions:
+      - name: "G2_0p8_stable_damped_sine"
+        description: "G2自环组在0.8m出现稳定阻尼正弦"
+        expression: "G2_D0p8m group has high A/B ratio OR median_fit_R2 >= 0.90 and median_PSR_dB >= 10"
+
+      - name: "G2_G1_frequency_match"
+        description: "G2主频与G1在0.8m主频差小于5-10%"
+        expression: "abs(f1_median_G2_D0p8 - f1_median_G1_D0p8) / f1_median_G1_D0p8 * 100 <= 10"
+
+      - name: "ground_length_sensitive"
+        description: "主频对地线长度高度敏感，改成低环路或50Ω后该主峰显著减弱或移位"
+        expression: "ground_condition_change causes f1 shift > 5 percent OR pass_rate shift > 20 percentage points"
+
+    if_true:
+      group_flag: "probe_ringing_significant"
+      recommendation: "后续远距离频率判定不能只看最大峰；优先使用低环路或定义负载接收配置"
+
+  true_source_frequency_exists:
+    chinese_name: "真实源频仍存在"
+    conditions:
+      all:
+        - "fsrc_MHz is defined from G3_D0p3m reference"
+        - "fsrc_trackable == true at 0.6m or 0.8m"
+        - "fsrc peak is not strongly sensitive to ground_condition"
+        - "fsrc-related peak changes continuously with distance"
+    if_true:
+      group_flag: "true_source_frequency_trackable"
+      recommendation: "后续应跟踪fsrc附近弱峰，不应只取FFT最大峰"
+
+  loading_effect_significant:
+    chinese_name: "线圈/加载显著改写结果"
+    rule_type: "satisfy_any"
+    conditions:
+      - "G1_vs_G4_same_distance_f1_change_percent > 5"
+      - "G1_vs_G4_same_distance_alpha_change_percent > 10"
+      - "G1_vs_G4_same_distance_pass_rate_change_percentage_points > 20"
+    if_true:
+      group_flag: "receiver_loading_significant"
+      recommendation: "后续所有实验必须锁定统一接收端负载和示波器输入方式"
+
+  receiver_self_response_significant:
+    chinese_name: "接收端本体响应显著"
+    rule_type: "satisfy_at_least_two"
+    minimum_conditions_required: 2
+    conditions:
+      - "VNA resonance frequency is close to dynamic f1"
+      - "VNA resonance shifts with load and dynamic f1 shifts synchronously"
+      - "coil static Q is high and waveform shows long-tail ringing or high PSR"
+      - "dynamic result is sensitive to oscilloscope input mode or terminal load"
+    if_true:
+      group_flag: "receiver_self_response_significant"
+      recommendation: "后续距离实验需同时跟踪fsrc和接收端响应峰"
+
+  nearfield_mutual_coupling_significant:
+    chinese_name: "近场互耦显著"
+    rule_type: "satisfy_at_least_two"
+    minimum_conditions_required: 2
+    conditions:
+      - "load change at 0.1m or 0.2m causes significant f1/alpha/Apk change"
+      - "the same load effect weakens or disappears at 0.6m"
+      - "nearfield pass rate, alpha, or amplitude changes systematically with load"
+    if_true:
+      group_flag: "nearfield_mutual_coupling_significant"
+      recommendation: "近场实验必须固定接收端负载；近场结果不能直接外推远场"
+
+# ----------------------------------------------------------------------
+# 11. Effective distance and stability rules
+# ----------------------------------------------------------------------
+
+effective_distance:
+  enabled: true
+  definition: "满足识别条件的最大距离"
+  usable_waveform_ratio_threshold_percent: 80.0
+  required_N: 20
+  required_fields:
+    - "pass_ratio_percent"
+    - "f1_median_MHz"
+    - "fsrc_trackable"
+
+stability:
+  enabled: true
+
+  engineering_stability:
+    definition: "10次中至少8次为优质波形"
+    N: 10
+    min_excellent_count: 8
+
+  statistical_stability:
+    CVf_excellent_percent: 3.0
+    CValpha_excellent_percent: 10.0
+    CVApk_excellent_percent: 10.0
+    CVf_usable_percent: 5.0
+    CValpha_usable_percent: 15.0
+    CVApk_usable_percent: 15.0
+
+# ----------------------------------------------------------------------
+# 12. Output behavior
+# ----------------------------------------------------------------------
+
+output_behavior:
+  write_waveform_class_to:
+    - "single_waveform_features.csv"
+    - "single_waveform_labels.csv"
+
+  write_quality_label_to:
+    - "single_waveform_features.csv"
+    - "single_waveform_labels.csv"
+
+  write_pass_flag_to:
+    - "single_waveform_features.csv"
+    - "single_waveform_labels.csv"
+
+  write_reject_reason_to:
+    - "single_waveform_features.csv"
+    - "single_waveform_labels.csv"
+    - "excluded_files.csv"
+
+  write_main_warning_flag_to:
+    - "single_waveform_labels.csv"
+
+  write_classification_rule_version_to:
+    - "single_waveform_labels.csv"
+    - "config_snapshot.csv"
+
+  write_group_flags_to:
+    - "group_quality_summary.csv"
+    - "quick_report.md"
+
+# ----------------------------------------------------------------------
+# 13. Manual review rule
+# ----------------------------------------------------------------------
+
+manual_review:
+  enabled: true
+
+  require_manual_review_if:
+    - "waveform_class == 'unknown'"
+    - "quality_label == 'unknown'"
+    - "waveform_class == 'C'"
+    - "waveform_class == 'E'"
+    - "waveform_class == 'H'"
+    - "main_warning_flag == 'metadata_conflict'"
+    - "main_warning_flag == 'undefined_group'"
+    - "main_warning_flag == 'pseudo_artifact_suspected'"
+    - "fsrc_trackable is null"
+    - "rho is NaN"
+    - "PSR_dB is NaN"
+
+  manual_review_output:
+    write_to_notes: true
+    write_to_quick_report: true
